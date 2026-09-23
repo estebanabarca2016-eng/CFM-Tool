@@ -127,7 +127,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ rows, total: rows.length, source: 'AirNav', icao: airnav })
     }
     const db = [...await getDatabase(), ...customRows]
-    const { searchParams } = new URL(req.url); const q = (searchParams.get('q') || '').trim().toLowerCase(); const icao = (searchParams.get('icao') || '').trim().toUpperCase(); const iata = (searchParams.get('iata') || '').trim().toUpperCase()
+    const q = (searchParams.get('q') || '').trim().toLowerCase(); const icao = (searchParams.get('icao') || '').trim().toUpperCase(); const iata = (searchParams.get('iata') || '').trim().toUpperCase()
     const icaos = Array.from(new Set((searchParams.get('icaos') || '').split(',').map(v => v.trim().toUpperCase()).filter(Boolean)))
     let filtered = db
     if (icaos.length) {
