@@ -327,11 +327,11 @@ function Dashboard({ emails, emailType, setEmailType, selectedEmail, setSelected
     })
   }, [currentSelected?.id, currentSelected?.type, matchingFbos])
 
-  async function openInFront() {
+  async function openInFront(subjectText: string, bodyText: string) {
     if (!currentSelected || currentSelected.type !== 'FBO') return notify('Select an FBO email first')
     if (!selectedFbo) return notify('Select an FBO from the location dropdown first')
-    const subject = stripHtml(currentSelected.subject)
-    const body = stripHtml(currentSelected.body)
+    const subject = subjectText.trim()
+    const body = bodyText.trim()
     const mailto = 'mailto:' + encodeURIComponent(selectedFbo.email) + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body)
     try {
       await navigator.clipboard.writeText('To: ' + selectedFbo.email + '\nSubject: ' + subject + '\n\n' + body)
@@ -345,7 +345,7 @@ function Dashboard({ emails, emailType, setEmailType, selectedEmail, setSelected
   return <>
     <div className="hero"><div><small className="heroBrand">CORPORATE FUEL MANAGEMENT</small><small>WELCOME TO</small><h2>Turn schedules<br />into action.</h2><p>Faster. Smarter. Together.</p></div><div className="planeGraphic">✈</div><div className="heroTag">AVIATION<br />FUELS<br />PEOPLE<br />POSSIBILITIES™</div></div>
     <div className="stats"><Stat icon={Users} value={customer} label="Customer" detail={hasSchedule ? 'Current Schedule' : ''} /><Stat icon={Plane} value={tail} label="Tail" detail={hasSchedule ? '1 aircraft' : ''} /><Stat icon={Activity} value={route} label="Route" detail={hasSchedule ? (Math.max(0, route.split(' → ').length - 1) + ' legs') : ''} /><Stat icon={Zap} value={fbo} label="FBO" detail={hasSchedule ? 'Primary FBO' : ''} /><Stat icon={CalendarDays} value={active[2] || ''} label="ETD" detail={hasSchedule ? (active[1] || '') : ''} /><Stat icon={CalendarDays} value={active[11] || ''} label="ETA" detail={hasSchedule ? (active[10] || '') : ''} /><Stat icon={Users} value={active[14] || ''} label="Agent" detail={hasSchedule ? customer : ''} /></div>
-    {emails.length > 0 && currentSelected && <div className="emailLayout"><div className="panel emailPanel"><div className="tabs"><button className={emailType === 'FBO' ? 'tab active' : 'tab'} onClick={() => { setEmailType('FBO'); setSelectedEmail(emails.find(e => e.type === 'FBO') || null) }}>FBO Emails ({emails.filter(e => e.type === 'FBO').length})</button><button className={emailType === 'Customer' ? 'tab active' : 'tab'} onClick={() => { setEmailType('Customer'); setSelectedEmail(emails.find(e => e.type === 'Customer') || null) }}>Customer Emails ({emails.filter(e => e.type === 'Customer').length})</button></div><div className="panelHead"><div><h3><Mail size={19} /> {emailType} Emails</h3><p>Click an email to preview the generated template.</p></div><div className="filters"><span><Search size={13} /> Search by ICAO, FBO, subject...</span><span>All Statuses⌄</span></div></div><div className="tableWrap"><table><thead><tr><th>ICAO</th><th>FBO</th><th>Subject</th><th>Aircraft</th><th>Date/Time</th><th>Status</th><th></th></tr></thead><tbody>{visibleEmails.map(e => <tr key={e.id} className={currentSelected.id === e.id ? 'selectedRow' : ''} onClick={() => setSelectedEmail(e)}><td><b>{e.icao}</b></td><td>{e.fbo}</td><td>{stripHtml(e.subject)}</td><td>{e.tail}</td><td>{active[1] || ''} {active[2] || ''}</td><td><span className="status ready"><i />{e.status}</span></td><td><button className="tiny" onClick={ev => { ev.stopPropagation(); setSelectedEmail(e) }}><Mail size={13} /></button></td></tr>)}</tbody></table></div></div><EmailPreview email={currentSelected} notify={notify} fbos={fbos} selectedFbo={selectedFbo} matchingFbos={matchingFbos} setSelectedFbo={id => currentSelected?.type === 'FBO' && setSelectedFboByEmail(prev => ({ ...prev, [currentSelected.id]: id }))} openInFront={openInFront} /></div>}
+    {emails.length > 0 && currentSelected && <div className="emailLayout"><div className="panel emailPanel"><div className="tabs"><button className={emailType === 'FBO' ? 'tab active' : 'tab'} onClick={() => { setEmailType('FBO'); setSelectedEmail(emails.find(e => e.type === 'FBO') || null) }}>FBO Emails ({emails.filter(e => e.type === 'FBO').length})</button><button className={emailType === 'Customer' ? 'tab active' : 'tab'} onClick={() => { setEmailType('Customer'); setSelectedEmail(emails.find(e => e.type === 'Customer') || null) }}>Customer Emails ({emails.filter(e => e.type === 'Customer').length})</button></div><div className="panelHead"><div><h3><Mail size={19} /> {emailType} Emails</h3><p>Click an email to preview the generated template.</p></div><div className="filters"><span><Search size={13} /> Search by ICAO, FBO, subject...</span><span>All Statuses⌄</span></div></div><div className="tableWrap"><table><thead><tr><th>ICAO</th><th>FBO</th><th>Subject</th><th>Aircraft</th><th>Date/Time</th><th>Status</th><th></th></tr></thead><tbody>{visibleEmails.map(e => <tr key={e.id} className={currentSelected.id === e.id ? 'selectedRow' : ''} onClick={() => setSelectedEmail(e)}><td><b>{e.icao}</b></td><td>{e.fbo}</td><td>{stripHtml(e.subject)}</td><td>{e.tail}</td><td>{active[1] || ''} {active[2] || ''}</td><td><span className="status ready"><i />{e.status}</span></td><td><button className="tiny" onClick={ev => { ev.stopPropagation(); setSelectedEmail(e) }}><Mail size={13} /></button></td></tr>)}</tbody></table></div></div><EmailPreview email={currentSelected} notify={notify} selectedFbo={selectedFbo} matchingFbos={matchingFbos} setSelectedFbo={id => currentSelected?.type === 'FBO' && setSelectedFboByEmail(prev => ({ ...prev, [currentSelected.id]: id }))} openInFront={openInFront} /></div>}
     <div className="panel recent"><div className="panelHead"><div><h3><FileText size={18} /> Recently Processed Schedules</h3><p>Schedules currently in your workspace</p></div></div><FlightTable rows={routeInfo.rows.length ? routeInfo.rows.map(r => [r[0], r[1], r[3], r[13], `${r[4] || ''} → ${r[6] || ''}`, r[2], r[11], cleanFboName(r[15] || '') , 'Ready']) : flights} /></div>
 
   </>
@@ -364,21 +364,49 @@ function copyRichText(html: string, notify: (s: string) => void, label: string) 
     navigator.clipboard.write([new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }), 'text/plain': new Blob([plain], { type: 'text/plain' }) })]).then(() => notify(label)).catch(() => navigator.clipboard?.writeText(plain).then(() => notify(label)))
   } else navigator.clipboard?.writeText(plain).then(() => notify(label))
 }
-function EmailPreview({ email, notify, fbos, selectedFbo, matchingFbos, setSelectedFbo, openInFront }: { email: Email; notify: (s: string) => void; fbos: FBO[]; selectedFbo: FBO | null; matchingFbos: FBO[]; setSelectedFbo: (id: number | null) => void; openInFront: () => void }) {
+function EmailPreview({ email, notify, selectedFbo, matchingFbos, setSelectedFbo, openInFront }: { email: Email; notify: (s: string) => void; selectedFbo: FBO | null; matchingFbos: FBO[]; setSelectedFbo: (id: number | null) => void; openInFront: (subject: string, body: string) => void }) {
+  const [draftSubject, setDraftSubject] = useState(email.subject)
+  const [draftBody, setDraftBody] = useState(email.body)
+  const bodyRef = React.useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    setDraftSubject(email.subject)
+    setDraftBody(email.body)
+  }, [email.id, email.subject, email.body])
+
+  useEffect(() => {
+    if (bodyRef.current && bodyRef.current.innerHTML !== draftBody) bodyRef.current.innerHTML = draftBody
+  }, [email.id])
+
   return <div className="panel emailPreview">
-    <div className="previewHead"><h3><Mail size={18} /> Email Preview</h3></div>
+    <div className="previewHead"><h3><Mail size={18} /> Email Preview</h3><span style={{fontSize:8,color:'#7b8b9f'}}>Editable draft</span></div>
     <div className="previewBody">
       {email.type === 'FBO' && <div className="fboComposeBox">
         <div className="fboComposeTitle"><b>FBO Email</b><span>{email.iata ? email.iata + ' / ' + email.icao : email.icao}</span></div>
         <div className="fboComposeGrid">
           <label>Location<select value={selectedFbo?.id || ''} onChange={e => setSelectedFbo(e.target.value ? Number(e.target.value) : null)}><option value="">Select FBO for this location...</option>{matchingFbos.map(f => <option key={f.id} value={f.id}>{f.name} — {f.email}</option>)}</select></label>
-          <div className="fboSelectedDetails"><span><b>FBO:</b> {selectedFbo?.name || '—'}</span><span><b>Email:</b> {selectedFbo?.email || '—'}</span><span><b>Phone:</b> {selectedFbo?.phone || '—'}</span></div>
+          <div className="fboSelectedDetails"><span><b>To:</b> {selectedFbo?.email || '—'}</span><span><b>Phone:</b> {selectedFbo?.phone || '—'}</span></div>
         </div>
         {!matchingFbos.length && <small className="fieldHint">No FBOs are registered for this IATA/ICAO yet. Add one in FBOs.</small>}
       </div>}
-      <div className="previewField"><div className="previewLabel"><b>Subject</b></div><div className="copyBox subjectBox" dangerouslySetInnerHTML={{ __html: email.subject }} /></div>
-      <div className="previewField bodyField"><div className="previewLabel"><b>Email Body</b></div><div className="copyBox bodyBox" dangerouslySetInnerHTML={{ __html: email.body }} /></div>
-      {email.type === 'FBO' && <button className="primary openFrontButton" onClick={openInFront}><Mail size={15} /> Open in Front</button>}
+      <div className="previewField">
+        <div className="previewLabel"><b>To</b></div>
+        <div className="copyBox" style={{minHeight:38,display:'flex',alignItems:'center',fontSize:9,color:selectedFbo?.email ? '#263e5a' : '#8a98a9',background:'#f8fafc'}}>
+          {email.type === 'FBO' ? (selectedFbo?.email || 'Select an FBO above') : 'Customer email address is not configured'}
+        </div>
+      </div>
+      <div className="previewField">
+        <div className="previewLabel"><b>Subject</b></div>
+        <input value={stripHtml(draftSubject)} onChange={e => setDraftSubject(e.target.value)} style={{width:'100%',border:'1px solid var(--line)',borderRadius:6,padding:'9px 10px',fontSize:9,background:'#fff',outline:'none'}} />
+      </div>
+      <div className="previewField bodyField">
+        <div className="previewLabel"><b>Email Body</b></div>
+        <div ref={bodyRef} className="copyBox bodyBox" contentEditable suppressContentEditableWarning onInput={e => setDraftBody(e.currentTarget.innerHTML)} style={{minHeight:250,outline:'none',cursor:'text'}} />
+      </div>
+      <div style={{display:'flex',gap:7,marginTop:12}}>
+        <button className="secondary" onClick={() => { setDraftSubject(email.subject); setDraftBody(email.body); if (bodyRef.current) bodyRef.current.innerHTML = email.body }}>Reset Draft</button>
+        {email.type === 'FBO' && <button className="primary openFrontButton" style={{marginTop:0,flex:1}} onClick={() => openInFront(stripHtml(draftSubject), stripHtml(draftBody))}><Mail size={15} /> Open in Front</button>}
+      </div>
     </div>
   </div>
 }
