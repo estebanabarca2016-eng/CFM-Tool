@@ -115,7 +115,11 @@ function parseAirNavFbos(html: string, icao: string): AirNavFbo[] {
       .map(m => stripAirNavHtml(m[1]))
       .filter(Boolean)
 
-    const name = anchors.find(v => !excluded.test(v) && !/@/.test(v) && v.length <= 120)
+    const moreInfoMatch = /<a\b[^>]*>\s*More info(?: and photos)?\s+(?:of|about)\s+([^<]+)<\/a>/i.exec(row)
+    const imageAlt = /<img\b[^>]*(?:alt|title)=["']([^"']+)["']/i.exec(row)
+    const name = (moreInfoMatch ? stripAirNavHtml(moreInfoMatch[1]) : '')
+      || anchors.find(v => !excluded.test(v) && !/@/.test(v) && v.length <= 120)
+      || (imageAlt ? stripAirNavHtml(imageAlt[1]) : '')
       || cells.find(v => !excluded.test(v) && !/@/.test(v) && v.length <= 120 && !/^ASRI\b/i.test(v))
     if (name) addFbo(name, email, phone)
   }

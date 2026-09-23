@@ -328,6 +328,7 @@ function Dashboard({ emails, emailType, setEmailType, selectedEmail, setSelected
   const [airnavFbos, setAirnavFbos] = useState<FBO[]>([])
   const [airnavLoading, setAirnavLoading] = useState(false)
   const [airnavError, setAirnavError] = useState('')
+  const [recipientLists, setRecipientLists] = useState<Record<string, string[]>>({})
   const selectedFboId = currentSelected?.type === 'FBO' ? (selectedFboByEmail[currentSelected.id] || null) : null
   const isUsAirnav = !!currentSelected?.icao && /^K[A-Z0-9]{3}$/.test(String(currentSelected.icao).trim().toUpperCase())
 
@@ -356,6 +357,17 @@ function Dashboard({ emails, emailType, setEmailType, selectedEmail, setSelected
   }, [currentSelected, airnavFbos, isUsAirnav])
 
   const selectedFbo = matchingFbos.find(f => f.id === selectedFboId) || null
+  const recipientKey = currentSelected ? `${currentSelected.id}:${currentSelected.type === 'FBO' ? (selectedFboId || 'none') : 'customer'}` : ''
+  const recipients = currentSelected ? (recipientLists[recipientKey] || []) : []
+
+  useEffect(() => {
+    if (!currentSelected) return
+    setRecipientLists(prev => {
+      if (prev[recipientKey]) return prev
+      const initial = currentSelected.type === 'FBO' ? (selectedFbo?.email ? [selectedFbo.email] : []) : (currentSelected.toEmails || [])
+      return { ...prev, [recipientKey]: initial }
+    })
+  }, [recipientKey, currentSelected?.id, selectedFbo?.email])
 
   useEffect(() => {
     if (!currentSelected || currentSelected.type !== 'FBO') return
@@ -365,20 +377,24 @@ function Dashboard({ emails, emailType, setEmailType, selectedEmail, setSelected
     })
   }, [currentSelected?.id, currentSelected?.type, matchingFbos])
 
-  async function openInFront(subjectText: string, bodyText: string) {
-    if (!currentSelected || currentSelected.type !== 'FBO') return notify('Select an FBO email first')
-    if (!selectedFbo) return notify('Select an FBO from the location dropdown first')
-    if (!selectedFbo.email) return notify('The selected FBO has no email listed by AirNav')
+  async function openInFront(recipientList: string[], subjectText: string, bodyText: string) {
+    const cleanRecipients = Array.from(new Set(recipientList.map(e => e.trim().toLowerCase()).filter(Boolean)))
+    if (!cleanRecipients.length) return notify('Add at least one email address first')
     const subject = subjectText.trim()
     const body = bodyText.trim()
-    const mailto = 'mailto:' + encodeURIComponent(selectedFbo.email) + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body)
+    const mailto = 'mailto:' + encodeURIComponent(cleanRecipients.join(',')) + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body)
     try {
-      await navigator.clipboard.writeText('To: ' + selectedFbo.email + '\nSubject: ' + subject + '\n\n' + body)
-      notify('Recipient, subject and body copied. Opening Front…')
+      await navigator.clipboard.writeText('To: ' + cleanRecipients.join(', ') + '\nSubject: ' + subject + '\n\n' + body)
+      notify('Recipients, subject and body copied. Opening Front…')
     } catch {
       notify('Opening Front…')
     }
     window.location.href = mailto
+  }
+
+  function updateRecipients(next: string[]) {
+    if (!recipientKey) return
+    setRecipientLists(prev => ({ ...prev, [recipientKey]: Array.from(new Set(next.map(e => e.trim().toLowerCase()).filter(Boolean))) }))
   }
 
   return <>
@@ -403,10 +419,11 @@ function copyRichText(html: string, notify: (s: string) => void, label: string) 
     navigator.clipboard.write([new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }), 'text/plain': new Blob([plain], { type: 'text/plain' }) })]).then(() => notify(label)).catch(() => navigator.clipboard?.writeText(plain).then(() => notify(label)))
   } else navigator.clipboard?.writeText(plain).then(() => notify(label))
 }
-function EmailPreview({ email, notify, selectedFbo, matchingFbos, setSelectedFbo, openInFront, airnavLoading, airnavError, isUsAirnav }: { email: Email; notify: (s: string) => void; selectedFbo: FBO | null; matchingFbos: FBO[]; setSelectedFbo: (id: number | null) => void; openInFront: (subject: string, body: string) => void; airnavLoading: boolean; airnavError: string; isUsAirnav: boolean }) {
+function EmailPreview({ email, notify, selectedFbo, matchingFbos, setSelectedFbo, openInFront, recipients, updateRecipients, airnavLoading, airnavError, isUsAirnav }: { email: Email; notify: (s: string) => void; selectedFbo: FBO | null; matchingFbos: FBO[]; setSelectedFbo: (id: number | null) => void; openInFront: (recipients: string[], subject: string, body: string) => void; recipients: string[]; updateRecipients: (next: string[]) => void; airnavLoading: boolean; airnavError: string; isUsAirnav: boolean }) {
   const [draftSubject, setDraftSubject] = useState(email.subject)
   const [draftBody, setDraftBody] = useState(email.body)
   const bodyRef = React.useRef<HTMLDivElement>(null)
+  const [newEmail, setNewEmail] = useState('')
 
   useEffect(() => {
     setDraftSubject(email.subject)
@@ -432,8 +449,12 @@ function EmailPreview({ email, notify, selectedFbo, matchingFbos, setSelectedFbo
       </div>}
       <div className="previewField">
         <div className="previewLabel"><b>To</b></div>
-        <div className="copyBox" style={{minHeight:38,display:'flex',alignItems:'center',fontSize:9,color:selectedFbo?.email ? '#263e5a' : '#8a98a9',background:'#f8fafc'}}>
-          {email.type === 'FBO' ? (selectedFbo?.email || 'Select an FBO above') : (email.toEmails?.length ? email.toEmails.join(', ') : 'No customer contacts configured')}
+        <div className="copyBox" style={{minHeight:38,fontSize:9,background:'#f8fafc',padding:'7px 9px'}}>
+          {recipients.length ? <div style={{display:'flex',flexWrap:'wrap',gap:5}}>{recipients.map(address => <span key={address} style={{display:'inline-flex',alignItems:'center',gap:4,border:'1px solid #d4e0ea',borderRadius:12,padding:'4px 7px',background:'#fff',color:'#263e5a'}}>{address}<button type="button" onClick={() => updateRecipients(recipients.filter(e => e !== address))} style={{border:0,background:'transparent',padding:0,cursor:'pointer',color:'#8a98a9',lineHeight:1}} aria-label={`Remove ${address}`}>×</button></span>)}</div> : <span style={{color:'#8a98a9'}}>No recipients added</span>}
+          <div style={{display:'flex',gap:6,marginTop:7}}>
+            <input value={newEmail} onChange={e => setNewEmail(e.target.value)} onKeyDown={e => { if(e.key==='Enter'){e.preventDefault();const v=newEmail.trim().toLowerCase();if(v&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)){updateRecipients([...recipients,v]);setNewEmail('')}else if(v)notify('Enter a valid email address')}}} placeholder="Add email address" style={{flex:1,border:'1px solid var(--line)',borderRadius:6,padding:'6px 8px',fontSize:9,background:'#fff',outline:'none'}} />
+            <button type="button" className="secondary" onClick={() => {const v=newEmail.trim().toLowerCase();if(v&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)){updateRecipients([...recipients,v]);setNewEmail('')}else notify('Enter a valid email address')}} style={{padding:'6px 9px'}}>Add</button>
+          </div>
         </div>
       </div>
       <div className="previewField">
@@ -446,7 +467,7 @@ function EmailPreview({ email, notify, selectedFbo, matchingFbos, setSelectedFbo
       </div>
       <div style={{display:'flex',gap:7,marginTop:12}}>
         <button className="secondary" onClick={() => { setDraftSubject(email.subject); setDraftBody(email.body); if (bodyRef.current) bodyRef.current.innerHTML = email.body }}>Reset Draft</button>
-        {email.type === 'FBO' && <button className="primary openFrontButton" style={{marginTop:0,flex:1}} onClick={() => openInFront(stripHtml(draftSubject), stripHtml(draftBody))}><Mail size={15} /> Open in Front</button>}
+        <button className="primary openFrontButton" style={{marginTop:0,flex:1}} onClick={() => openInFront(recipients, stripHtml(draftSubject), stripHtml(draftBody))}><Mail size={15} /> Open in Front</button>
       </div>
     </div>
   </div>
