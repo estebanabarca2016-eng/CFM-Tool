@@ -9,7 +9,7 @@ type Deal = { id: number; name: string; provider: string; description: string; c
 type Customer = { id: number; name: string; dealIds: number[]; rule: string; includeTripNumber: boolean; homeBase: string }
 type Aircraft = { id: number; tail: string; type: string; customerId: number | null; homeBase: string; avcard: string; expiration: string; active: boolean }
 type Contact = { id: number; customerId: number; name: string; emails: string[] }
-type Email = { id: number; type: 'FBO' | 'Customer'; icao: string; iata?: string; fbo: string; tail: string; customer: string; toEmails?: string[]; subject: string; body: string; status: 'Ready' | 'Pending' | 'Draft' }
+type Email = { id: number; type: 'FBO' | 'Customer'; icao: string; iata?: string; fbo: string; tail: string; customer: string; toEmails?: string[]; ccEmails?: string[]; subject: string; body: string; status: 'Ready' | 'Pending' | 'Draft' }
 type Template = { id: number; name: string; type: 'Customer' | 'FBO'; customerIds: number[]; subject: string; body: string; updated: string }
 type Airport = { id: number; icao: string; iata: string; name: string; city: string; state: string; countryCode: string; countryName: string }
 type FBO = { id: number; iata: string; icao: string; name: string; email: string; phone: string }
@@ -328,7 +328,7 @@ function Dashboard({ emails, emailType, setEmailType, selectedEmail, setSelected
   const [airnavFbos, setAirnavFbos] = useState<FBO[]>([])
   const [airnavLoading, setAirnavLoading] = useState(false)
   const [airnavError, setAirnavError] = useState('')
-  const [recipientLists, setRecipientLists] = useState<Record<string, string[]>>({})
+  const [recipientLists, setRecipientLists] = useState<Record<string, { to: string[]; cc: string[] }>>({})
   const selectedFboId = currentSelected?.type === 'FBO' ? (selectedFboByEmail[currentSelected.id] || null) : null
   const isUsAirnav = !!currentSelected?.icao && /^K[A-Z0-9]{3}$/.test(String(currentSelected.icao).trim().toUpperCase())
 
@@ -358,13 +358,16 @@ function Dashboard({ emails, emailType, setEmailType, selectedEmail, setSelected
 
   const selectedFbo = matchingFbos.find(f => f.id === selectedFboId) || null
   const recipientKey = currentSelected ? `${currentSelected.id}:${currentSelected.type === 'FBO' ? (selectedFboId || 'none') : 'customer'}` : ''
-  const recipients = currentSelected ? (recipientLists[recipientKey] || []) : []
+  const toRecipients = currentSelected ? (recipientLists[recipientKey]?.to || []) : []
+  const ccRecipients = currentSelected ? (recipientLists[recipientKey]?.cc || []) : []
 
   useEffect(() => {
     if (!currentSelected) return
     setRecipientLists(prev => {
       if (prev[recipientKey]) return prev
-      const initial = currentSelected.type === 'FBO' ? (selectedFbo?.email ? [selectedFbo.email] : []) : (currentSelected.toEmails || [])
+      const initial = currentSelected.type === 'FBO'
+        ? { to: selectedFbo?.email ? [selectedFbo.email] : [], cc: currentSelected.ccEmails || [] }
+        : { to: [], cc: currentSelected.ccEmails || currentSelected.toEmails || [] }
       return { ...prev, [recipientKey]: initial }
     })
   }, [recipientKey, currentSelected?.id, selectedFbo?.email])
@@ -377,30 +380,45 @@ function Dashboard({ emails, emailType, setEmailType, selectedEmail, setSelected
     })
   }, [currentSelected?.id, currentSelected?.type, matchingFbos])
 
-  async function openInFront(recipientList: string[], subjectText: string, bodyText: string) {
-    const cleanRecipients = Array.from(new Set(recipientList.map(e => e.trim().toLowerCase()).filter(Boolean)))
-    if (!cleanRecipients.length) return notify('Add at least one email address first')
+  function cleanEmailList(list: string[]) {
+    return Array.from(new Set(list.map(e => e.trim().toLowerCase()).filter(e => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e))))
+  }
+
+  async function openInFront(toList: string[], ccList: string[], subjectText: string, bodyText: string) {
+    const cleanTo = cleanEmailList(toList)
+    const cleanCc = cleanEmailList(ccList).filter(e => !cleanTo.includes(e))
+    if (!cleanTo.length && !cleanCc.length) return notify('Add at least one email address first')
     const subject = subjectText.trim()
     const body = bodyText.trim()
-    const mailto = 'mailto:' + encodeURIComponent(cleanRecipients.join(',')) + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body)
+    const encodeAddressList = (list: string[]) => list.map(e => encodeURIComponent(e)).join(',')
+    const headers = [
+      cleanCc.length ? 'cc=' + encodeAddressList(cleanCc) : '',
+      'subject=' + encodeURIComponent(subject),
+      'body=' + encodeURIComponent(body)
+    ].filter(Boolean).join('&')
+    const mailto = 'mailto:' + encodeAddressList(cleanTo) + '?' + headers
     try {
-      await navigator.clipboard.writeText('To: ' + cleanRecipients.join(', ') + '\nSubject: ' + subject + '\n\n' + body)
-      notify('Recipients, subject and body copied. Opening Front…')
+      const lines: string[] = []
+      if (cleanTo.length) lines.push('To: ' + cleanTo.join(', '))
+      if (cleanCc.length) lines.push('Cc: ' + cleanCc.join(', '))
+      lines.push('Subject: ' + subject, '', body)
+      await navigator.clipboard.writeText(lines.join('\n'))
+      notify('To/Cc recipients, subject and body copied. Opening Front…')
     } catch {
       notify('Opening Front…')
     }
     window.location.href = mailto
   }
 
-  function updateRecipients(next: string[]) {
+  function updateRecipients(nextTo: string[], nextCc: string[]) {
     if (!recipientKey) return
-    setRecipientLists(prev => ({ ...prev, [recipientKey]: Array.from(new Set(next.map(e => e.trim().toLowerCase()).filter(Boolean))) }))
+    setRecipientLists(prev => ({ ...prev, [recipientKey]: { to: cleanEmailList(nextTo), cc: cleanEmailList(nextCc) } }))
   }
 
   return <>
     <div className="hero"><div><small className="heroBrand">CORPORATE FUEL MANAGEMENT</small><small>WELCOME TO</small><h2>Turn schedules<br />into action.</h2><p>Faster. Smarter. Together.</p></div><div className="planeGraphic">✈</div><div className="heroTag">AVIATION<br />FUELS<br />PEOPLE<br />POSSIBILITIES™</div></div>
     <div className="stats"><Stat icon={Users} value={customer} label="Customer" detail={hasSchedule ? 'Current Schedule' : ''} /><Stat icon={Plane} value={tail} label="Tail" detail={hasSchedule ? '1 aircraft' : ''} /><Stat icon={Activity} value={route} label="Route" detail={hasSchedule ? (Math.max(0, route.split(' → ').length - 1) + ' legs') : ''} /><Stat icon={Zap} value={fbo} label="FBO" detail={hasSchedule ? 'Primary FBO' : ''} /><Stat icon={CalendarDays} value={active[2] || ''} label="ETD" detail={hasSchedule ? (active[1] || '') : ''} /><Stat icon={CalendarDays} value={active[11] || ''} label="ETA" detail={hasSchedule ? (active[10] || '') : ''} /><Stat icon={Users} value={active[14] || ''} label="Agent" detail={hasSchedule ? customer : ''} /></div>
-    {emails.length > 0 && currentSelected && <div className="emailLayout"><div className="panel emailPanel"><div className="tabs"><button className={emailType === 'FBO' ? 'tab active' : 'tab'} onClick={() => { setEmailType('FBO'); setSelectedEmail(emails.find(e => e.type === 'FBO') || null) }}>FBO Emails ({emails.filter(e => e.type === 'FBO').length})</button><button className={emailType === 'Customer' ? 'tab active' : 'tab'} onClick={() => { setEmailType('Customer'); setSelectedEmail(emails.find(e => e.type === 'Customer') || null) }}>Customer Emails ({emails.filter(e => e.type === 'Customer').length})</button></div><div className="panelHead"><div><h3><Mail size={19} /> {emailType} Emails</h3><p>Click an email to preview the generated template.</p></div><div className="filters"><span><Search size={13} /> Search by ICAO, FBO, subject...</span><span>All Statuses⌄</span></div></div><div className="tableWrap"><table><thead><tr><th>ICAO</th><th>FBO</th><th>Subject</th><th>Aircraft</th><th>Date/Time</th><th>Status</th><th></th></tr></thead><tbody>{visibleEmails.map(e => <tr key={e.id} className={currentSelected.id === e.id ? 'selectedRow' : ''} onClick={() => setSelectedEmail(e)}><td><b>{e.icao}</b></td><td>{e.fbo}</td><td>{stripHtml(e.subject)}</td><td>{e.tail}</td><td>{active[1] || ''} {active[2] || ''}</td><td><span className="status ready"><i />{e.status}</span></td><td><button className="tiny" onClick={ev => { ev.stopPropagation(); setSelectedEmail(e) }}><Mail size={13} /></button></td></tr>)}</tbody></table></div></div><EmailPreview email={currentSelected} notify={notify} selectedFbo={selectedFbo} matchingFbos={matchingFbos} setSelectedFbo={id => currentSelected?.type === 'FBO' && setSelectedFboByEmail(prev => ({ ...prev, [currentSelected.id]: id }))} openInFront={openInFront} recipients={recipients} updateRecipients={updateRecipients} airnavLoading={airnavLoading} airnavError={airnavError} isUsAirnav={isUsAirnav} /></div>}
+    {emails.length > 0 && currentSelected && <div className="emailLayout"><div className="panel emailPanel"><div className="tabs"><button className={emailType === 'FBO' ? 'tab active' : 'tab'} onClick={() => { setEmailType('FBO'); setSelectedEmail(emails.find(e => e.type === 'FBO') || null) }}>FBO Emails ({emails.filter(e => e.type === 'FBO').length})</button><button className={emailType === 'Customer' ? 'tab active' : 'tab'} onClick={() => { setEmailType('Customer'); setSelectedEmail(emails.find(e => e.type === 'Customer') || null) }}>Customer Emails ({emails.filter(e => e.type === 'Customer').length})</button></div><div className="panelHead"><div><h3><Mail size={19} /> {emailType} Emails</h3><p>Click an email to preview the generated template.</p></div><div className="filters"><span><Search size={13} /> Search by ICAO, FBO, subject...</span><span>All Statuses⌄</span></div></div><div className="tableWrap"><table><thead><tr><th>ICAO</th><th>FBO</th><th>Subject</th><th>Aircraft</th><th>Date/Time</th><th>Status</th><th></th></tr></thead><tbody>{visibleEmails.map(e => <tr key={e.id} className={currentSelected.id === e.id ? 'selectedRow' : ''} onClick={() => setSelectedEmail(e)}><td><b>{e.icao}</b></td><td>{e.fbo}</td><td>{stripHtml(e.subject)}</td><td>{e.tail}</td><td>{active[1] || ''} {active[2] || ''}</td><td><span className="status ready"><i />{e.status}</span></td><td><button className="tiny" onClick={ev => { ev.stopPropagation(); setSelectedEmail(e) }}><Mail size={13} /></button></td></tr>)}</tbody></table></div></div><EmailPreview email={currentSelected} notify={notify} selectedFbo={selectedFbo} matchingFbos={matchingFbos} setSelectedFbo={id => currentSelected?.type === 'FBO' && setSelectedFboByEmail(prev => ({ ...prev, [currentSelected.id]: id }))} openInFront={openInFront} toRecipients={toRecipients} ccRecipients={ccRecipients} updateRecipients={updateRecipients} airnavLoading={airnavLoading} airnavError={airnavError} isUsAirnav={isUsAirnav} /></div>}
     <div className="panel recent"><div className="panelHead"><div><h3><FileText size={18} /> Recently Processed Schedules</h3><p>Schedules currently in your workspace</p></div></div><FlightTable rows={routeInfo.rows.length ? routeInfo.rows.map(r => [r[0], r[1], r[3], r[13], `${r[4] || ''} → ${r[6] || ''}`, r[2], r[11], cleanFboName(r[15] || '') , 'Ready']) : flights} /></div>
 
   </>
@@ -419,11 +437,12 @@ function copyRichText(html: string, notify: (s: string) => void, label: string) 
     navigator.clipboard.write([new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }), 'text/plain': new Blob([plain], { type: 'text/plain' }) })]).then(() => notify(label)).catch(() => navigator.clipboard?.writeText(plain).then(() => notify(label)))
   } else navigator.clipboard?.writeText(plain).then(() => notify(label))
 }
-function EmailPreview({ email, notify, selectedFbo, matchingFbos, setSelectedFbo, openInFront, recipients, updateRecipients, airnavLoading, airnavError, isUsAirnav }: { email: Email; notify: (s: string) => void; selectedFbo: FBO | null; matchingFbos: FBO[]; setSelectedFbo: (id: number | null) => void; openInFront: (recipients: string[], subject: string, body: string) => void; recipients: string[]; updateRecipients: (next: string[]) => void; airnavLoading: boolean; airnavError: string; isUsAirnav: boolean }) {
+function EmailPreview({ email, notify, selectedFbo, matchingFbos, setSelectedFbo, openInFront, toRecipients, ccRecipients, updateRecipients, airnavLoading, airnavError, isUsAirnav }: { email: Email; notify: (s: string) => void; selectedFbo: FBO | null; matchingFbos: FBO[]; setSelectedFbo: (id: number | null) => void; openInFront: (to: string[], cc: string[], subject: string, body: string) => void; toRecipients: string[]; ccRecipients: string[]; updateRecipients: (nextTo: string[], nextCc: string[]) => void; airnavLoading: boolean; airnavError: string; isUsAirnav: boolean }) {
   const [draftSubject, setDraftSubject] = useState(email.subject)
   const [draftBody, setDraftBody] = useState(email.body)
   const bodyRef = React.useRef<HTMLDivElement>(null)
   const [newEmail, setNewEmail] = useState('')
+  const [newCcEmail, setNewCcEmail] = useState('')
 
   useEffect(() => {
     setDraftSubject(email.subject)
@@ -450,10 +469,20 @@ function EmailPreview({ email, notify, selectedFbo, matchingFbos, setSelectedFbo
       <div className="previewField">
         <div className="previewLabel"><b>To</b></div>
         <div className="copyBox" style={{minHeight:38,fontSize:9,background:'#f8fafc',padding:'7px 9px'}}>
-          {recipients.length ? <div style={{display:'flex',flexWrap:'wrap',gap:5}}>{recipients.map(address => <span key={address} style={{display:'inline-flex',alignItems:'center',gap:4,border:'1px solid #d4e0ea',borderRadius:12,padding:'4px 7px',background:'#fff',color:'#263e5a'}}>{address}<button type="button" onClick={() => updateRecipients(recipients.filter(e => e !== address))} style={{border:0,background:'transparent',padding:0,cursor:'pointer',color:'#8a98a9',lineHeight:1}} aria-label={`Remove ${address}`}>×</button></span>)}</div> : <span style={{color:'#8a98a9'}}>No recipients added</span>}
+          {toRecipients.length ? <div style={{display:'flex',flexWrap:'wrap',gap:5}}>{toRecipients.map(address => <span key={address} style={{display:'inline-flex',alignItems:'center',gap:4,border:'1px solid #d4e0ea',borderRadius:12,padding:'4px 7px',background:'#fff',color:'#263e5a'}}>{address}<button type="button" onClick={() => updateRecipients(toRecipients.filter(e => e !== address), ccRecipients)} style={{border:0,background:'transparent',padding:0,cursor:'pointer',color:'#8a98a9',lineHeight:1}}>×</button></span>)}</div> : <span style={{color:'#8a98a9'}}>No To recipients</span>}
           <div style={{display:'flex',gap:6,marginTop:7}}>
-            <input value={newEmail} onChange={e => setNewEmail(e.target.value)} onKeyDown={e => { if(e.key==='Enter'){e.preventDefault();const v=newEmail.trim().toLowerCase();if(v&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)){updateRecipients([...recipients,v]);setNewEmail('')}else if(v)notify('Enter a valid email address')}}} placeholder="Add email address" style={{flex:1,border:'1px solid var(--line)',borderRadius:6,padding:'6px 8px',fontSize:9,background:'#fff',outline:'none'}} />
-            <button type="button" className="secondary" onClick={() => {const v=newEmail.trim().toLowerCase();if(v&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)){updateRecipients([...recipients,v]);setNewEmail('')}else notify('Enter a valid email address')}} style={{padding:'6px 9px'}}>Add</button>
+            <input value={newEmail} onChange={e => setNewEmail(e.target.value)} onKeyDown={e => { if(e.key==='Enter'){e.preventDefault();const v=newEmail.trim().toLowerCase();if(v&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)){updateRecipients([...toRecipients,v],ccRecipients);setNewEmail('')}else if(v)notify('Enter a valid email address')}}} placeholder="Add To email address" style={{flex:1,border:'1px solid var(--line)',borderRadius:6,padding:'6px 8px',fontSize:9,background:'#fff',outline:'none'}} />
+            <button type="button" className="secondary" onClick={() => {const v=newEmail.trim().toLowerCase();if(v&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)){updateRecipients([...toRecipients,v],ccRecipients);setNewEmail('')}else notify('Enter a valid email address')}} style={{padding:'6px 9px'}}>Add</button>
+          </div>
+        </div>
+      </div>
+      <div className="previewField">
+        <div className="previewLabel"><b>CC</b></div>
+        <div className="copyBox" style={{minHeight:38,fontSize:9,background:'#f8fafc',padding:'7px 9px'}}>
+          {ccRecipients.length ? <div style={{display:'flex',flexWrap:'wrap',gap:5}}>{ccRecipients.map(address => <span key={address} style={{display:'inline-flex',alignItems:'center',gap:4,border:'1px solid #d4e0ea',borderRadius:12,padding:'4px 7px',background:'#fff',color:'#263e5a'}}>{address}<button type="button" onClick={() => updateRecipients(toRecipients,ccRecipients.filter(e => e !== address))} style={{border:0,background:'transparent',padding:0,cursor:'pointer',color:'#8a98a9',lineHeight:1}}>×</button></span>)}</div> : <span style={{color:'#8a98a9'}}>No CC recipients</span>}
+          <div style={{display:'flex',gap:6,marginTop:7}}>
+            <input value={newCcEmail} onChange={e => setNewCcEmail(e.target.value)} onKeyDown={e => { if(e.key==='Enter'){e.preventDefault();const v=newCcEmail.trim().toLowerCase();if(v&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)){updateRecipients(toRecipients,[...ccRecipients,v]);setNewCcEmail('')}else if(v)notify('Enter a valid email address')}}} placeholder="Add CC email address" style={{flex:1,border:'1px solid var(--line)',borderRadius:6,padding:'6px 8px',fontSize:9,background:'#fff',outline:'none'}} />
+            <button type="button" className="secondary" onClick={() => {const v=newCcEmail.trim().toLowerCase();if(v&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)){updateRecipients(toRecipients,[...ccRecipients,v]);setNewCcEmail('')}else notify('Enter a valid email address')}} style={{padding:'6px 9px'}}>Add</button>
           </div>
         </div>
       </div>
@@ -467,7 +496,7 @@ function EmailPreview({ email, notify, selectedFbo, matchingFbos, setSelectedFbo
       </div>
       <div style={{display:'flex',gap:7,marginTop:12}}>
         <button className="secondary" onClick={() => { setDraftSubject(email.subject); setDraftBody(email.body); if (bodyRef.current) bodyRef.current.innerHTML = email.body }}>Reset Draft</button>
-        <button className="primary openFrontButton" style={{marginTop:0,flex:1}} onClick={() => openInFront(recipients, stripHtml(draftSubject), stripHtml(draftBody))}><Mail size={15} /> Open in Front</button>
+        <button className="primary openFrontButton" style={{marginTop:0,flex:1}} onClick={() => openInFront(toRecipients, ccRecipients, stripHtml(draftSubject), stripHtml(draftBody))}><Mail size={15} /> Open in Front</button>
       </div>
     </div>
   </div>
@@ -507,7 +536,7 @@ function buildCommunications(rows: string[][], customers: Customer[], aircraft: 
     const routeCodes:string[]=[]; for(const r of rows) for(const raw of [r[4],r[6]]) { const c=String(raw||'').trim().toUpperCase(); if(c&&!routeCodes.includes(c)) routeCodes.push(c) }
     const values:Record<string,string>={TRIP_NUMBER:customer.includeTripNumber?tripNumber:'',TAIL:tail,ROUTE:routeCodes.join(' → '),DEPARTURE_DATE:first[1]||'',ETD:first[2]||'',ETA:last[11]||'',FBO:cleanFboName(first[15]||''),AGENT:first[14]||'',CUSTOMER:customer?.name||'',ICAO:String(first[4]||'').toUpperCase(),...airportValues(String(first[4]||'')),DEPARTURE_ICAO:String(first[4]||'').toUpperCase(),ARRIVAL_ICAO:String(last[6]||'').toUpperCase(),DEPARTURE_AIRPORT:first[5]||'',ARRIVAL_AIRPORT:last[7]||'',FT:first[8]||'',CREW:first[9]||'',ARRIVAL_DATE:last[10]||first[1]||'',LEG_NUMBER:first[12]||'',TRIP_LOCATION:routeCodes.map(formatTripLocation).join('<br><br>'),AVCARD:matchedAircraft?.avcard?formatCardForEmail(matchedAircraft.avcard):'',AVCARD_EXPIRATION:matchedAircraft?.expiration||''}
     const tripLine=customer.includeTripNumber&&tripNumber?`Trip Number: ${tripNumber}<br>`:''; let subject=replaceTemplatePlaceholders(customerTemplate.subject,values,tripLine); if(customer.includeTripNumber&&tripNumber&&!stripHtml(subject).trim().endsWith(` - ${tripNumber}`))subject+=` - ${tripNumber}`
-    emails.push({id:10000,type:'Customer',icao:String(first[4]||'').toUpperCase(),fbo:cleanFboName(first[15]||''),tail,customer:customer.name,toEmails:customerEmails,subject,body:replaceTemplatePlaceholders(customerTemplate.body,values,tripLine,matchedAircraft),status:'Ready'})
+    emails.push({id:10000,type:'Customer',icao:String(first[4]||'').toUpperCase(),fbo:cleanFboName(first[15]||''),tail,customer:customer.name,toEmails:[],ccEmails:customerEmails,subject,body:replaceTemplatePlaceholders(customerTemplate.body,values,tripLine,matchedAircraft),status:'Ready'})
   }
   const locations=new Map<string,string[]>(); for(const r of rows) for(const raw of [r[4],r[6]]) { const code=String(raw||'').trim().toUpperCase(); if(code&&!locations.has(code))locations.set(code,r) }
   let id=20000
@@ -772,7 +801,7 @@ function SettingsPage({ profile, setProfile, notify, customers, setCustomers, co
     const dealRows: unknown[][]=[['ID','Deal Name','Provider','Description','Color','Tankering']]; if(sample) dealRows.push(['1','CAA Network Pricing','CAA','Corporate Aircraft Association network pricing program.','#1976e5','Yes']); else deals.forEach(d=>dealRows.push([d.id,d.name,d.provider,d.description,d.color,d.tankering?'Yes':'No'])); appendSheet(wb,dealRows,'Customer Deals')
     const templateRows: unknown[][]=[['ID','Template Name','Type','Customers','Subject','Body','Updated']]; if(sample){templateRows.push(['1','Customer Schedule Example','Customer','Ahold','Fuel Reservation – {{TAIL}} – {{ROUTE}} – {{DEPARTURE_DATE}}','<p>Hello {{CUSTOMER}},</p><p>Please review the fuel reservation for {{TAIL}}.</p>','Sep 10, 2026']); templateRows.push(['2','FBO Handling Example','FBO','','Handling Request – {{TAIL}} – {{ICAO}} – {{ARRIVAL_MONTH_DAY}}','<p>We have <b>{{TAIL}}</b> coming to <b>{{ARRIVAL_AIRPORT}}</b>/<b>{{ICAO}}</b>.</p>','Sep 10, 2026'])} else templates.forEach(t=>templateRows.push([t.id,t.name,t.type,t.customerIds.map(id=>customers.find(c=>c.id===id)?.name).filter(Boolean).join('; '),t.subject,t.body,t.updated])); appendSheet(wb,templateRows,'Templates')
     const scheduleRows: unknown[][]=[SCHEDULE_COLUMNS], parsedSchedule=parseSchedule(schedule).rows; if(sample) scheduleRows.push(['1024','09/17/2026','08:30','N123AB','KMIA','Miami','KTEB','Teterboro','02:45','3','09/17/2026','11:15','1','Ahold','John Smith','']); else parsedSchedule.forEach(r=>scheduleRows.push(r)); appendSheet(wb,scheduleRows,'Schedule')
-    const emailRows: unknown[][]=[['ID','Type','ICAO','IATA','FBO','Tail','Customer','To Emails','Subject','Body','Status']]; if(!sample) generatedEmails.forEach(e=>emailRows.push([e.id,e.type,e.icao,e.iata||'',e.fbo,e.tail,e.customer,(e.toEmails||[]).join('; '),e.subject,e.body,e.status])); appendSheet(wb,emailRows,'Generated Emails')
+    const emailRows: unknown[][]=[['ID','Type','ICAO','IATA','FBO','Tail','Customer','To Emails','CC Emails','Subject','Body','Status']]; if(!sample) generatedEmails.forEach(e=>emailRows.push([e.id,e.type,e.icao,e.iata||'',e.fbo,e.tail,e.customer,(e.toEmails||[]).join('; '),(e.ccEmails||[]).join('; '),e.subject,e.body,e.status])); appendSheet(wb,emailRows,'Generated Emails')
     return wb
   }
   function downloadWorkbook(sample=false){XLSX.writeFile(makeWorkbook(sample),sample?'CFM-Tool-Excel-Template.xlsx':'CFM-Tool-Backup.xlsx');notify(sample?'Sample Excel template downloaded':'Current CFM data downloaded')}
@@ -788,7 +817,7 @@ function SettingsPage({ profile, setProfile, notify, customers, setCustomers, co
       const importedContacts:Contact[]=contactRows.map((r,i)=>({id:numberId(r.ID,3000+i),customerId:customerByName.get(String(r['Customer Name']||'').trim().toLowerCase())||0,name:String(r['Contact Name']||'').trim(),emails:Array.from(new Set(excelList(r['Email Addresses']).map(e=>e.toLowerCase())))})).filter(c=>c.customerId&&c.name&&c.emails.length)
       const importedAircraft:Aircraft[]=aircraftRows.map((r,i)=>({id:numberId(r.ID,4000+i),tail:String(r.Tail||'').trim().toUpperCase(),type:String(r['Aircraft Type']||'').trim(),customerId:customerByName.get(String(r['Customer Name']||'').trim().toLowerCase())||null,homeBase:String(r['Home Base']||'').trim().toUpperCase(),avcard:String(r.AVCARD||'').replace(/\D/g,''),expiration:String(r.Expiration||'').trim(),active:parseExcelBoolean(r.Active,true)})).filter(a=>a.tail&&a.type)
       const importedTemplates:Template[]=templateRows.map((r,i)=>({id:numberId(r.ID,5000+i),name:String(r['Template Name']||'').trim(),type:(String(r.Type||'').trim().toLowerCase()==='fbo'?'FBO':'Customer') as Template['type'],customerIds:excelList(r.Customers).map(name=>customerByName.get(name.toLowerCase())).filter((id):id is number=>typeof id==='number'),subject:String(r.Subject||''),body:String(r.Body||''),updated:String(r.Updated||'')})).filter(t=>t.name&&t.subject&&t.body)
-      const importedEmails:Email[]=emailRows.map((r,i)=>({id:numberId(r.ID,6000+i),type:(String(r.Type||'').trim().toLowerCase()==='fbo'?'FBO':'Customer') as Email['type'],icao:String(r.ICAO||'').trim().toUpperCase(),iata:String(r.IATA||'').trim().toUpperCase(),fbo:String(r.FBO||'').trim(),tail:String(r.Tail||'').trim(),customer:String(r.Customer||'').trim(),toEmails:excelList(r['To Emails']).map(e=>e.toLowerCase()),subject:String(r.Subject||''),body:String(r.Body||''),status:['Ready','Pending','Draft'].includes(String(r.Status||''))?String(r.Status) as Email['status']:'Ready'})).filter(e=>e.icao||e.subject||e.body)
+      const importedEmails:Email[]=emailRows.map((r,i)=>({id:numberId(r.ID,6000+i),type:(String(r.Type||'').trim().toLowerCase()==='fbo'?'FBO':'Customer') as Email['type'],icao:String(r.ICAO||'').trim().toUpperCase(),iata:String(r.IATA||'').trim().toUpperCase(),fbo:String(r.FBO||'').trim(),tail:String(r.Tail||'').trim(),customer:String(r.Customer||'').trim(),toEmails:excelList(r['To Emails']).map(e=>e.toLowerCase()),ccEmails:excelList(r['CC Emails']).map(e=>e.toLowerCase()),subject:String(r.Subject||''),body:String(r.Body||''),status:['Ready','Pending','Draft'].includes(String(r.Status||''))?String(r.Status) as Email['status']:'Ready'})).filter(e=>e.icao||e.subject||e.body)
       if(customerRows.length) setCustomers(importedCustomers); if(dealRows.length) setDeals(importedDeals); if(contactRows.length) setContacts(importedContacts); if(aircraftRows.length) setAircraft(importedAircraft); if(templateRows.length) setTemplates(importedTemplates)
       if(scheduleSheet){const raw=XLSX.utils.sheet_to_json<unknown[]>(scheduleSheet,{header:1,defval:''}) as unknown[][]; setSchedule(raw.filter(row=>row.some(cell=>String(cell??'').trim())).map(row=>row.map(cell=>String(cell??'')).join('\t')).join('\n'))}
       if(emailRows.length){setGeneratedEmails(importedEmails);setSelectedEmail(importedEmails[0]||null)} else {setGeneratedEmails([]);setSelectedEmail(null)}
