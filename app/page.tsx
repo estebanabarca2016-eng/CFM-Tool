@@ -401,13 +401,7 @@ function Dashboard({ emails, emailType, setEmailType, selectedEmail, setSelected
     }))
   }
 
-  useEffect(() => {
-    if (!currentSelected || currentSelected.type !== 'FBO') return
-    setSelectedFboByEmail(prev => {
-      if (prev[currentSelected.id] !== undefined) return prev
-      return { ...prev, [currentSelected.id]: matchingFbos.length === 1 ? matchingFbos[0].id : null }
-    })
-  }, [currentSelected?.id, currentSelected?.type, matchingFbos])
+  // FBO selection is always manual. Each draft starts with "Select FBO".
 
   function cleanEmailList(list: string[]) {
     return Array.from(new Set(list.map(e => e.trim().toLowerCase()).filter(e => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e))))
@@ -488,7 +482,7 @@ function EmailPreview({ email, notify, selectedFbo, matchingFbos, setSelectedFbo
       {email.type === 'FBO' && <div className="fboComposeBox">
         <div className="fboComposeTitle"><b>FBO Email</b><span>{email.iata ? email.iata + ' / ' + email.icao : email.icao}</span></div>
         <div className="fboComposeGrid">
-          <label>FBO at this location<select value={selectedFbo?.id || ''} onChange={e => setSelectedFbo(e.target.value ? Number(e.target.value) : null)}><option value="">Select FBO...</option>{matchingFbos.map(f => <option key={f.id} value={f.id}>{f.name}{f.email ? ' — ' + f.email : ' — Email not listed'}</option>)}</select></label>
+          <div className="fboScheduleNotice">The FBO on the schedule for this location was: <b>{email.fbo || 'Not specified'}</b></div><label>FBO at this location<select value={selectedFbo?.id || ''} onChange={e => setSelectedFbo(e.target.value ? Number(e.target.value) : null)}><option value="">Select FBO...</option>{matchingFbos.map(f => <option key={f.id} value={f.id}>{f.name}{f.email ? ' — ' + f.email : ' — Email not listed'}</option>)}</select></label>
           <div className="fboSelectedDetails"><span><b>Source:</b> {isUsAirnav ? 'AirNav' : 'AirNav unavailable for non-U.S. airport'}</span><span><b>Phone:</b> {selectedFbo?.phone || '—'}</span></div>
         </div>
         {airnavLoading && <small className="fieldHint">Looking up available FBOs on AirNav…</small>}
@@ -854,7 +848,7 @@ function SettingsPage({ profile, setProfile, notify, customers, setCustomers, co
     }catch{notify('Unable to import that Excel file')}
   }
   return <div className="settingsGrid">
-    <div className="panel settingSection"><h3>Excel Data Backup</h3><p className="fieldHint">Download your current CFM data as a multi-sheet Excel workbook, or import it later to restore the data.</p><div className="excelActions"><button className="primary" onClick={()=>downloadWorkbook(false)}><DownloadIcon size={15}/>Download Current Data</button><button className="secondary" onClick={()=>downloadWorkbook(true)}><FileText size={15}/>Download Excel Template</button><label className="importBackupButton"><span className="importBackupIcon"><Upload size={18}/></span><span><strong>Import Excel Backup</strong><small>Browse your computer and restore a CFM workbook</small></span><span className="browsePill">Browse</span><input type="file" accept=".xlsx,.xls" onChange={e=>{const file=e.target.files?.[0];if(file)void importWorkbook(file);e.currentTarget.value='' }}/></label></div><div className="backupSheets"><b>Worksheets</b><span>Customers</span><span>Customer Contacts</span><span>Aircraft</span><span>Customer Deals</span><span>Templates</span><span>Schedule</span><span>Generated Emails</span></div></div>
+    <div className="panel settingSection"><h3>Excel Data Backup</h3><p className="fieldHint">Download your current CFM data as a multi-sheet Excel workbook, or import it later to restore the data.</p><div className="excelActions"><button className="primary" onClick={()=>downloadWorkbook(false)}><DownloadIcon size={15}/>Download Current Data</button><button className="secondary" onClick={()=>downloadWorkbook(true)}><FileText size={15}/>Download Excel Template</button><label className="importBackupButton"><span className="importBackupIcon"><Upload size={18}/></span><span><strong>Import Excel Backup</strong><small>Browse your computer and restore a CFM workbook</small></span><input type="file" accept=".xlsx,.xls" onChange={e=>{const file=e.target.files?.[0];if(file)void importWorkbook(file);e.currentTarget.value='' }}/></label></div><div className="backupSheets"><b>Worksheets</b><span>Customers</span><span>Customer Contacts</span><span>Aircraft</span><span>Customer Deals</span><span>Templates</span><span>Schedule</span><span>Generated Emails</span></div></div>
     <div className="panel settingSection"><h3>Profile Access</h3><p className="fieldHint">Choose the operating profile for this workstation. Both profiles use the same customers, aircraft, templates, airports and other CFM data.</p><div className="profileCards"><button type="button" className={profile==='Supervisor'?'profileCard active':'profileCard'} onClick={()=>setProfile('Supervisor')}><div><b>Supervisor</b><small>Full access to Dashboard, Schedule Processor, Customers, Aircraft, Templates, Airports, Alerts and Settings.</small></div><Check size={16}/></button><button type="button" className={profile==='Dispatcher'?'profileCard active':'profileCard'} onClick={()=>setProfile('Dispatcher')}><div><b>Dispatcher</b><small>Access limited to Dashboard and Schedule Processor. Schedule processing still uses the supervisor's shared data.</small></div><Check size={16}/></button></div></div>
   </div>
 }
