@@ -9,7 +9,7 @@ type Deal = { id: number; name: string; provider: string; description: string; c
 type Customer = { id: number; name: string; dealIds: number[]; rule: string; includeTripNumber: boolean; homeBase: string }
 type Aircraft = { id: number; tail: string; type: string; customerId: number | null; homeBase: string; avcard: string; expiration: string; active: boolean }
 type Contact = { id: number; customerId: number; name: string; emails: string[] }
-type Email = { id: number; type: 'FBO' | 'Customer'; icao: string; iata?: string; fbo: string; tail: string; customer: string; toEmails?: string[]; ccEmails?: string[]; subject: string; body: string; status: 'Ready' | 'Pending' | 'Draft' }
+type Email = { id: number; type: 'FBO' | 'Customer'; icao: string; iata?: string; airportLabel?: string; fbo: string; tail: string; customer: string; toEmails?: string[]; ccEmails?: string[]; subject: string; body: string; status: 'Ready' | 'Pending' | 'Draft' }
 type Template = { id: number; name: string; type: 'Customer' | 'FBO'; customerIds: number[]; subject: string; body: string; updated: string }
 type Airport = { id: number; icao: string; iata: string; name: string; city: string; state: string; countryCode: string; countryName: string }
 type FBO = { id: number; iata: string; icao: string; name: string; email: string; phone: string }
@@ -480,9 +480,9 @@ function EmailPreview({ email, notify, selectedFbo, matchingFbos, setSelectedFbo
     <div className="previewHead"><h3><Mail size={18} /> Email Preview</h3><span style={{fontSize:8,color:'#7b8b9f'}}>Editable draft</span></div>
     <div className="previewBody">
       {email.type === 'FBO' && <div className="fboComposeBox">
-        <div className="fboComposeTitle"><b>FBO Email</b><span>{email.iata ? email.iata + ' / ' + email.icao : email.icao}</span></div>
+        <div className="fboComposeTitle"><b>FBO Email</b><span>{email.airportLabel || (email.iata ? email.iata + ' / ' + email.icao : email.icao)} — <em>{email.fbo || 'FBO not specified'}</em></span></div>
         <div className="fboComposeGrid">
-          <div className="fboScheduleNotice">The FBO on the schedule for this location was: <b>{email.fbo || 'Not specified'}</b></div><label>FBO at this location<select value={selectedFbo?.id || ''} onChange={e => setSelectedFbo(e.target.value ? Number(e.target.value) : null)}><option value="">Select FBO...</option>{matchingFbos.map(f => <option key={f.id} value={f.id}>{f.name}{f.email ? ' — ' + f.email : ' — Email not listed'}</option>)}</select></label>
+          <div className="fboScheduleNotice">The FBO selected for this location is: <b>{email.fbo || 'Not specified'}</b></div><label>FBO at this location<select value={selectedFbo?.id || ''} onChange={e => setSelectedFbo(e.target.value ? Number(e.target.value) : null)}><option value="">Select FBO...</option>{matchingFbos.map(f => <option key={f.id} value={f.id}>{f.name}{f.email ? ' — ' + f.email : ' — Email not listed'}</option>)}</select></label>
           <div className="fboSelectedDetails"><span><b>Source:</b> {isUsAirnav ? 'AirNav' : 'AirNav unavailable for non-U.S. airport'}</span><span><b>Phone:</b> {selectedFbo?.phone || '—'}</span></div>
         </div>
         {airnavLoading && <small className="fieldHint">Looking up available FBOs on AirNav…</small>}
@@ -556,7 +556,7 @@ function buildCommunications(rows: string[][], customers: Customer[], aircraft: 
   else if (!customerTemplate) errors.push(`No customer template assigned to ${customer.name}. You can still proceed with FBO drafts.`)
   if (customer && customerTemplate) {
     const last=rows[rows.length-1], tripNumber=String(first[0]||'').trim(), tail=matchedAircraft?.tail||String(first[3]||'').trim()
-    const routeCodes:string[]=[]; for(const r of rows) for(const raw of [r[4],r[6]]) { const c=String(raw||'').trim().toUpperCase(); if(c&&routeCodes[routeCodes.length-1]!==c) routeCodes.push(c) }
+    const routeCodes:string[]=[]; const routeSequence=[rows[0]?.[4],...rows.map(r=>r[6])]; for(const raw of routeSequence) { const c=String(raw||'').trim().toUpperCase(); if(c&&routeCodes[routeCodes.length-1]!==c) routeCodes.push(c) }
     const values:Record<string,string>={TRIP_NUMBER:customer.includeTripNumber?tripNumber:'',TAIL:tail,ROUTE:routeCodes.join(' → '),DEPARTURE_DATE:first[1]||'',ETD:first[2]||'',ETA:last[11]||'',FBO:cleanFboName(first[15]||''),AGENT:first[14]||'',CUSTOMER:customer?.name||'',ICAO:String(first[4]||'').toUpperCase(),...airportValues(String(first[4]||'')),DEPARTURE_ICAO:String(first[4]||'').toUpperCase(),ARRIVAL_ICAO:String(last[6]||'').toUpperCase(),DEPARTURE_AIRPORT:first[5]||'',ARRIVAL_AIRPORT:last[7]||'',FT:first[8]||'',CREW:first[9]||'',ARRIVAL_DATE:last[10]||first[1]||'',LEG_NUMBER:first[12]||'',TRIP_LOCATION:routeCodes.map(formatTripLocation).join('<br><br>'),AVCARD:matchedAircraft?.avcard?formatCardForEmail(matchedAircraft.avcard):'',AVCARD_EXPIRATION:matchedAircraft?.expiration||''}
     const tripLine=customer.includeTripNumber&&tripNumber?`Trip Number: ${tripNumber}<br>`:''; let subject=replaceTemplatePlaceholders(customerTemplate.subject,values,tripLine); if(customer.includeTripNumber&&tripNumber&&!stripHtml(subject).trim().endsWith(` - ${tripNumber}`))subject+=` - ${tripNumber}`
     emails.push({id:10000,type:'Customer',icao:String(first[4]||'').toUpperCase(),fbo:cleanFboName(first[15]||''),tail,customer:customer.name,toEmails:[],ccEmails:customerEmails,subject,body:replaceTemplatePlaceholders(customerTemplate.body,values,tripLine,matchedAircraft),status:'Ready'})
@@ -566,10 +566,11 @@ function buildCommunications(rows: string[][], customers: Customer[], aircraft: 
   for(const [code,r] of locations) {
     const tid=fboSelections[code]; const template=tid?templates.find(t=>t.id===tid&&t.type==='FBO'):undefined; if(!template)continue
     const tailAircraft=aircraftByTail(r[3])||matchedAircraft; const tail=tailAircraft?.tail||String(r[3]||'').trim()
-    const routeCodesForFbo:string[]=[]; for(const row of rows) for(const raw of [row[4],row[6]]) { const routeCode=String(raw||'').trim().toUpperCase(); if(routeCode&&routeCodesForFbo[routeCodesForFbo.length-1]!==routeCode) routeCodesForFbo.push(routeCode) }
+    const routeCodesForFbo:string[]=[]; const routeSequenceForFbo=[rows[0]?.[4],...rows.map(row=>row[6])]; for(const raw of routeSequenceForFbo) { const routeCode=String(raw||'').trim().toUpperCase(); if(routeCode&&routeCodesForFbo[routeCodesForFbo.length-1]!==routeCode) routeCodesForFbo.push(routeCode) }
     const scheduledFbo=cleanFboName(rows.find(row=>String(row[4]||'').trim().toUpperCase()===code)?.[15]||r[15]||'')
     const values:Record<string,string>={TRIP_NUMBER:r[0]||'',TAIL:tail,ROUTE:routeCodesForFbo.join(' → '),DEPARTURE_DATE:r[1]||'',ETD:r[2]||'',ETA:r[11]||'',FBO:scheduledFbo,AGENT:r[14]||'',CUSTOMER:customer?.name||'',ICAO:code,DEPARTURE_ICAO:String(r[4]||'').toUpperCase(),ARRIVAL_ICAO:String(r[6]||'').toUpperCase(),...airportValues(code),DEPARTURE_AIRPORT:r[5]||'',ARRIVAL_AIRPORT:r[7]||'',FT:r[8]||'',CREW:r[9]||'',ARRIVAL_DATE:r[10]||r[1]||'',ARRIVAL_TIME:r[11]||'',DEPARTURE_DATE_ACTUAL:r[1]||'',DEPARTURE_TIME:r[2]||'',ARRIVAL_MONTH_DAY:formatMonthDay(r[10]||r[1]||''),DEPARTURE_MONTH_DAY:formatMonthDay(r[1]||''),LEG_NUMBER:r[12]||'',AVCARD:tailAircraft?.avcard?formatCardForEmail(tailAircraft.avcard):'',AVCARD_EXPIRATION:tailAircraft?.expiration||''}
-    emails.push({id:id++,type:'FBO',icao:code,iata:airportValues(code).IATA,fbo:scheduledFbo,tail,customer:customer?.name||'',subject:replaceTemplatePlaceholders(template.subject,values),body:replaceTemplatePlaceholders(template.body,values,'',tailAircraft),status:'Ready'})
+    const locationAirport=airportByIcao(code); const airportLabel=locationAirport ? `${locationAirport.city||locationAirport.name||code}${locationAirport.countryCode==='US'&&locationAirport.state?`, ${locationAirport.state}`:''} (${locationAirport.iata||code})` : code;
+    emails.push({id:id++,type:'FBO',icao:code,iata:airportValues(code).IATA,airportLabel,fbo:scheduledFbo,tail,customer:customer?.name||'',subject:replaceTemplatePlaceholders(template.subject,values),body:replaceTemplatePlaceholders(template.body,values,'',tailAircraft),status:'Ready'})
   }
   return {emails,errors:Array.from(new Set(errors))}
 }
