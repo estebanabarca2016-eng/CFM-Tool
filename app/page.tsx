@@ -2,13 +2,14 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Activity, AlertTriangle, Bell, CalendarDays, Check, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, Copy, Edit3, FileText, LayoutDashboard, Mail, Menu, Plane, Plus, Search, Send, Settings, Sparkles, Trash2, Upload, Users, X, Zap } from 'lucide-react'
 
-type Page = 'Dashboard' | 'Schedule Processor' | 'Customers' | 'Aircraft' | 'Customer Deals' | 'Templates' | 'Airports' | 'Alerts' | 'Settings'
+type Page = 'Dashboard' | 'Schedule Processor' | 'Customers' | 'Aircraft' | 'Customer Deals' | 'Templates' | 'Airports' | 'FBOs' | 'Alerts' | 'Settings'
 type Deal = { id: number; name: string; provider: string; description: string; color: string; tankering: boolean }
 type Customer = { id: number; name: string; dealIds: number[]; rule: string; includeTripNumber: boolean; homeBase: string }
 type Aircraft = { id: number; tail: string; type: string; customerId: number | null; homeBase: string; avcard: string; expiration: string; active: boolean }
 type Email = { id: number; type: 'FBO' | 'Customer'; icao: string; fbo: string; tail: string; customer: string; subject: string; body: string; status: 'Ready' | 'Pending' | 'Draft' }
 type Template = { id: number; name: string; type: 'Customer' | 'FBO'; customerIds: number[]; dealIds: number[]; subject: string; body: string; updated: string }
 type Airport = { id: number; icao: string; iata: string; name: string; city: string; state: string; countryCode: string; countryName: string }
+type FBO = { id: number; iata: string; icao: string; name: string; email: string; phone: string }
 type AvcardAlert = { id: number; type: 'AVCARD'; message: 'Expiration'; aircraft: string; note: string; customer: string; expiration: string; status: 'Open' }
 
 
@@ -20,6 +21,7 @@ const nav: [Page, string, any][] = [
   ['Customer Deals', 'Pricing Programs', Activity],
   ['Templates', 'Email Library', FileText],
   ['Airports', 'Airport Directory', Plane],
+  ['FBOs', 'FBO Directory', Mail],
   ['Alerts', 'Exceptions', Bell],
   ['Settings', 'Configuration', Settings]
 ]
@@ -229,6 +231,7 @@ export default function App() {
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null)
   const [emailType, setEmailType] = useState<'FBO' | 'Customer'>('FBO')
   const [templates, setTemplates] = useState<Template[]>(initialTemplates)
+  const [fbos, setFbos] = useState<FBO[]>([])
   const [alertTick, setAlertTick] = useState(0)
   useEffect(() => { const timer = window.setInterval(() => setAlertTick(t => t + 1), 24 * 60 * 60 * 1000); return () => window.clearInterval(timer) }, [])
   const avcardAlerts = useMemo(() => buildAvcardAlerts(aircraft, customers), [aircraft, customers, alertTick])
@@ -247,7 +250,7 @@ export default function App() {
         {page === 'Customer Deals' && <CustomerDeals deals={deals} setDeals={setDeals} notify={notify} />}
         {page === 'Customers' && <Customers customers={customers} setCustomers={setCustomers} deals={deals} notify={notify} />}
         {page === 'Aircraft' && <AircraftPage aircraft={aircraft} setAircraft={setAircraft} customers={customers} deals={deals} notify={notify} />}
-        {page === 'Templates' && <Templates templates={templates} setTemplates={setTemplates} customers={customers} deals={deals} notify={notify} />}{page === 'Airports' && <Airports notify={notify} />}{page === 'Alerts' && <Alerts alerts={avcardAlerts} />}{page === 'Settings' && <SettingsPage notify={notify} />}
+        {page === 'Templates' && <Templates templates={templates} setTemplates={setTemplates} customers={customers} deals={deals} notify={notify} />}{page === 'Airports' && <Airports notify={notify} />}{page === 'FBOs' && <FBOs fbos={fbos} setFbos={setFbos} notify={notify} />}{page === 'Alerts' && <Alerts alerts={avcardAlerts} />}{page === 'Settings' && <SettingsPage notify={notify} />}
       </div></main>{toast && <div className="toast"><CheckCircle2 size={17} />{toast}</div>}
   </div>
 }
@@ -485,6 +488,135 @@ function Templates({ templates, setTemplates, customers, deals, notify }: { temp
   function remove(id: number) { setTemplates(templates.filter(t => t.id !== id)); notify('Template removed') }
   return <div className="panel full"><div className="sectionIntro"><div><h3>Email Templates</h3><p>Build reusable emails with formatting, schedule placeholders, and optional AVCARD tables.</p></div><button className="primary" onClick={() => openEditor()}><Plus size={16} /> New Template</button></div><div className="templateSections"><section><h4>FBO Templates</h4><div className="tableWrap"><table><thead><tr><th>Template Name</th><th>Subject</th><th>Last Updated</th><th>Actions</th></tr></thead><tbody>{templates.filter(t => t.type === 'FBO').map(t => <tr key={t.id}><td><b>{t.name}</b></td><td>{stripHtml(t.subject)}</td><td>{t.updated}</td><td><button className="tiny" onClick={() => openEditor(t)}><Edit3 size={13}/></button><button className="tiny" onClick={() => remove(t.id)}><Trash2 size={13}/></button></td></tr>)}</tbody></table></div></section><section><h4>Customer Templates</h4><div className="tableWrap"><table><thead><tr><th>Template Name</th><th>Customers Using Template</th><th>Subject</th><th>Last Updated</th><th>Actions</th></tr></thead><tbody>{templates.filter(t => t.type === 'Customer').map(t => <tr key={t.id}><td><b>{t.name}</b></td><td>{t.customerIds.map(id => customers.find(c => c.id === id)?.name).filter(Boolean).join(', ') || 'All customers'}</td><td>{stripHtml(t.subject)}</td><td>{t.updated}</td><td><button className="tiny" onClick={() => openEditor(t)}><Edit3 size={13}/></button><button className="tiny" onClick={() => remove(t.id)}><Trash2 size={13}/></button></td></tr>)}</tbody></table></div></section></div><div className="placeholderGuide"><b>Placeholders</b><span>{'{{TAIL}}'}</span><span>{'{{ROUTE}}'}</span><span>{'{{DEPARTURE_DATE}}'}</span><span>{'{{TRIP_NUMBER}}'}</span><span>{'{{ETD}}'}</span><span>{'{{ETA}}'}</span><span>{'{{FBO}}'}</span><span>{'{{AGENT}}'}</span><span>{'{{ICAO}}'}</span><span>{'{{CUSTOMER}}'}</span><span>{'{{ARRIVAL_MONTH_DAY}}'}</span><span>{'{{ARRIVAL_TIME}}'}</span><span>{'{{DEPARTURE_MONTH_DAY}}'}</span><span>{'{{DEPARTURE_TIME}}'}</span><span>{'{{AVCARD_TABLE}}'}</span><small>{'{{AVCARD_TABLE}}'} inserts a formatted 3-column AVCARD information table wherever you place it in the email body.</small></div>{open && <div className="editor"><h3>{editing ? 'Edit Template' : 'Add Template'}</h3><div className="formGrid"><label>Template name<input value={name} onChange={e => setName(e.target.value)} placeholder="ABC Fuel Reservation" /></label><label>Type<select value={type} onChange={e => { const next = e.target.value as 'Customer' | 'FBO'; setType(next); if (!editing) { setSubject(next === 'Customer' ? customerSubject : fboSubject); setBody(next === 'Customer' ? customerBody : fboBody) } }}><option value="Customer">Customer</option><option value="FBO">FBO</option></select></label>{type === 'Customer' && <div className="wide"><span className="labelTitle">Customers using this template</span><div className="dealChecks">{customers.map(c => <label key={c.id}><input type="checkbox" checked={customerIds.includes(c.id)} onChange={() => toggleCustomer(c.id)}/><span>{c.name}</span><small>{c.includeTripNumber ? 'Trip Number included' : 'Trip Number not included'}</small></label>)}</div></div>}{type === 'FBO' && <div className="wide"><span className="labelTitle">Deals using this FBO template</span><p className="fieldHint">Assign this template to one or more customer deals. Leave empty for a general FBO template.</p><div className="dealChecks">{deals.map(d => <label key={d.id} style={{borderLeftColor:d.color}}><input type="checkbox" checked={dealIds.includes(d.id)} onChange={()=>setDealIds(ids=>ids.includes(d.id)?ids.filter(x=>x!==d.id):[...ids,d.id])}/><span style={{color:d.color}}>{d.name}</span><small>{d.provider}</small></label>)}</div></div>}<div className="wide"><label>Subject</label><RichEditor value={subject} onChange={setSubject} placeholder={customerSubject} notify={notify}/></div><div className="wide"><label>Template body</label><RichEditor value={body} onChange={setBody} multiline allowTable={type === 'Customer' || type === 'FBO'} placeholder="Write the email template here..." notify={notify}/></div></div><div className="formActions"><button className="secondary" onClick={close}>Cancel</button><button className="primary" onClick={save}><Check size={15}/> Save Template</button></div></div>}</div>
 }
+
+function FBOs({ fbos, setFbos, notify }: { fbos: FBO[]; setFbos: (f: FBO[]) => void; notify: (s: string) => void }) {
+  const [query, setQuery] = useState('')
+  const [editing, setEditing] = useState<FBO | null>(null)
+  const [open, setOpen] = useState(false)
+  const [iata, setIata] = useState('')
+  const [icao, setIcao] = useState('')
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [phone, setPhone] = useState('')
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toUpperCase()
+    if (!q) return fbos
+    return fbos.filter(f => f.iata.toUpperCase().includes(q) || f.icao.toUpperCase().includes(q))
+  }, [fbos, query])
+
+  function openEditor(f?: FBO) {
+    setEditing(f || null)
+    setIata(f?.iata || '')
+    setIcao(f?.icao || '')
+    setName(f?.name || '')
+    setEmail(f?.email || '')
+    setPhone(f?.phone || '')
+    setOpen(true)
+  }
+
+  function close() {
+    setOpen(false)
+    setEditing(null)
+    setIata('')
+    setIcao('')
+    setName('')
+    setEmail('')
+    setPhone('')
+  }
+
+  function save() {
+    const cleanIata = iata.trim().toUpperCase()
+    const cleanIcao = icao.trim().toUpperCase()
+    const cleanName = name.trim()
+    const cleanEmail = email.trim()
+    const cleanPhone = phone.trim()
+
+    if (!cleanIata && !cleanIcao) return notify('Enter at least an IATA or ICAO code')
+    if (!cleanName || !cleanEmail || !cleanPhone) return notify('FBO name, email and phone number are required')
+
+    const item: FBO = {
+      id: editing?.id || Date.now(),
+      iata: cleanIata,
+      icao: cleanIcao,
+      name: cleanName,
+      email: cleanEmail,
+      phone: cleanPhone
+    }
+
+    setFbos(editing ? fbos.map(f => f.id === editing.id ? item : f) : [...fbos, item])
+    notify(editing ? 'FBO updated' : 'FBO added')
+    close()
+  }
+
+  function remove(id: number) {
+    setFbos(fbos.filter(f => f.id !== id))
+    notify('FBO removed')
+  }
+
+  return <div className="panel full">
+    <div className="sectionIntro">
+      <div>
+        <h3>FBO Directory</h3>
+        <p>Manage FBO contact details and search by either IATA or ICAO airport code.</p>
+      </div>
+      <button className="primary" onClick={() => openEditor()}><Plus size={16} /> Add FBO</button>
+    </div>
+
+    <div className="toolbar">
+      <div><Search size={15} /><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search IATA or ICAO" /></div>
+    </div>
+
+    <div className="tableWrap">
+      <table>
+        <thead>
+          <tr>
+            <th>IATA</th>
+            <th>ICAO</th>
+            <th>FBO Name</th>
+            <th>FBO Email</th>
+            <th>FBO Phone Number</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {filtered.length ? filtered.map(f => (
+            <tr key={f.id}>
+              <td><b>{f.iata || '—'}</b></td>
+              <td><b>{f.icao || '—'}</b></td>
+              <td>{f.name}</td>
+              <td><a className="link" href={`mailto:${f.email}`}>{f.email}</a></td>
+              <td>{f.phone}</td>
+              <td>
+                <button className="tiny" onClick={() => openEditor(f)}><Edit3 size={13}/></button>
+                <button className="tiny" onClick={() => remove(f.id)}><Trash2 size={13}/></button>
+              </td>
+            </tr>
+          )) : (
+            <tr><td colSpan={6} style={{ textAlign: 'center', padding: 28 }}>{query.trim() ? 'No FBOs match that IATA or ICAO.' : 'No FBOs have been added yet.'}</td></tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+
+    {open && <div className="editor">
+      <h3>{editing ? 'Edit FBO' : 'Add FBO'}</h3>
+      <div className="formGrid">
+        <label>IATA code<input value={iata} maxLength={3} onChange={e => setIata(e.target.value.toUpperCase().replace(/[^A-Z]/g, ''))} placeholder="MIA" /></label>
+        <label>ICAO code<input value={icao} maxLength={4} onChange={e => setIcao(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} placeholder="KMIA" /></label>
+        <label>FBO name<input value={name} onChange={e => setName(e.target.value)} placeholder="Example Aviation" /></label>
+        <label>FBO email<input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="ops@example.com" /></label>
+        <label>FBO phone number<input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+1 305 555 0100" /></label>
+      </div>
+      <p className="fieldHint">IATA or ICAO is required. The other code may be left blank.</p>
+      <div className="formActions">
+        <button className="secondary" onClick={close}>Cancel</button>
+        <button className="primary" onClick={save}><Check size={15}/> Save FBO</button>
+      </div>
+    </div>}
+  </div>
+}
+
 
 function Airports({ notify }: { notify: (s: string) => void }) {
   const [rows, setRows] = useState<Airport[]>([])
