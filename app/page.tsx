@@ -246,7 +246,7 @@ export default function App() {
         {page === 'Schedule Processor' && <ScheduleProcessor schedule={schedule} setSchedule={setSchedule} notify={notify} deals={deals} customers={customers} aircraft={aircraft} templates={templates} setGeneratedEmails={setGeneratedEmails} setPage={setPage} />}
         {page === 'Customer Deals' && <CustomerDeals deals={deals} setDeals={setDeals} notify={notify} />}
         {page === 'Customers' && <Customers customers={customers} setCustomers={setCustomers} deals={deals} notify={notify} />}
-        {page === 'Aircraft' && <AircraftPage aircraft={aircraft} setAircraft={setAircraft} customers={customers} notify={notify} />}
+        {page === 'Aircraft' && <AircraftPage aircraft={aircraft} setAircraft={setAircraft} customers={customers} deals={deals} notify={notify} />}
         {page === 'Templates' && <Templates templates={templates} setTemplates={setTemplates} customers={customers} deals={deals} notify={notify} />}{page === 'Airports' && <Airports notify={notify} />}{page === 'Alerts' && <Alerts alerts={avcardAlerts} />}{page === 'Settings' && <SettingsPage notify={notify} />}
       </div></main>{toast && <div className="toast"><CheckCircle2 size={17} />{toast}</div>}
   </div>
