@@ -605,25 +605,39 @@ function AircraftPage({ aircraft, setAircraft, customers, notify }: { aircraft: 
 const TEMPLATE_PLACEHOLDERS = ['TAIL','ROUTE','DEPARTURE_DATE','TRIP_NUMBER','ETD','ETA','FBO','AGENT','ICAO','IATA','AIRPORT_NAME','CUSTOMER','ARRIVAL_MONTH_DAY','ARRIVAL_TIME','DEPARTURE_MONTH_DAY','DEPARTURE_TIME','DEPARTURE_ICAO','ARRIVAL_ICAO','ARRIVAL_AIRPORT','TRIP_NUMBER_LINE','TRIP_LOCATION']
 function RichEditor({ value, onChange, multiline, placeholder, allowTable, notify }: { value: string; onChange: (v: string) => void; multiline?: boolean; placeholder?: string; allowTable?: boolean; notify: (s: string) => void }) {
   const ref = React.useRef<HTMLDivElement>(null)
+  const [fontSize, setFontSize] = useState(3)
   React.useEffect(() => { if (ref.current && ref.current.innerHTML !== value) ref.current.innerHTML = value }, [value])
   function command(cmd: string, arg?: string) { ref.current?.focus(); document.execCommand(cmd, false, arg); onChange(ref.current?.innerHTML || '') }
   function addPlaceholder(key: string) { command('insertText', `{{${key}}}`) }
   function addTable() { command('insertText', '{{AVCARD_TABLE}}'); notify('AVCARD table placeholder inserted') }
   function changeColor(color: string) { if (color) command('foreColor', color) }
-  function changeSize(size: string) { if (size) command('fontSize', size) }
-  return <div className="richEditor"><div className="richToolbar">
-    <button type="button" onMouseDown={e => e.preventDefault()} onClick={() => command('bold')}><b>B</b></button>
-    <select className="formatSelect" defaultValue="" aria-label="Text color" onMouseDown={e => e.stopPropagation()} onChange={e => { changeColor(e.target.value); e.currentTarget.value = '' }}>
-      <option value="">Color</option><option value="#111827">Black</option><option value="#1d4ed8">Blue</option><option value="#0f766e">Teal</option><option value="#b91c1c">Red</option><option value="#6d28d9">Purple</option>
-    </select>
-    <select className="formatSelect" defaultValue="" aria-label="Text size" onMouseDown={e => e.stopPropagation()} onChange={e => { changeSize(e.target.value); e.currentTarget.value = '' }}>
-      <option value="">Size</option><option value="2">Small</option><option value="3">Normal</option><option value="4">Large</option><option value="5">XL</option>
-    </select>
-    <button type="button" onMouseDown={e => e.preventDefault()} onClick={() => command('backColor', '#fff19a')}>Highlight</button>
-    {allowTable && <button type="button" onMouseDown={e => e.preventDefault()} onClick={addTable}>+ AVCARD Table</button>}
-    {TEMPLATE_PLACEHOLDERS.map(key => <button key={key} type="button" className="placeholderBtn" onMouseDown={e => e.preventDefault()} onClick={() => addPlaceholder(key)}>{key}</button>)}
-  </div><div ref={ref} className={'richContent ' + (multiline ? 'multiline' : '')} contentEditable suppressContentEditableWarning data-placeholder={placeholder || ''} onInput={e => onChange(e.currentTarget.innerHTML)} /> </div>
+  function changeSize(next: number) {
+    const clamped = Math.max(1, Math.min(7, next))
+    setFontSize(clamped)
+    command('fontSize', String(clamped))
+  }
+  return <div className="richEditor">
+    <div className="richToolbar">
+      <button type="button" className="toolbarIconButton" title="Bold" aria-label="Bold" onMouseDown={e => e.preventDefault()} onClick={() => command('bold')}><b>B</b></button>
+      <label className="colorTool" title="Text color">
+        <span className="colorDot" />
+        <input type="color" defaultValue="#111827" aria-label="Text color" onChange={e => changeColor(e.target.value)} />
+      </label>
+      {multiline && <div className="sizeTool" title="Text size">
+        <button type="button" onMouseDown={e => e.preventDefault()} onClick={() => changeSize(fontSize - 1)} aria-label="Decrease text size">−</button>
+        <span>{fontSize}</span>
+        <button type="button" onMouseDown={e => e.preventDefault()} onClick={() => changeSize(fontSize + 1)} aria-label="Increase text size">+</button>
+      </div>}
+      <select className="placeholderSelect" defaultValue="" aria-label="Insert field" onMouseDown={e => e.stopPropagation()} onChange={e => { if (e.target.value) { addPlaceholder(e.target.value); e.currentTarget.value = '' } }}>
+        <option value="">Insert Field</option>
+        {TEMPLATE_PLACEHOLDERS.map(key => <option key={key} value={key}>{key.replaceAll('_', ' ')}</option>)}
+      </select>
+      {allowTable && <button type="button" className="toolbarActionButton" title="Insert AVCARD table" onMouseDown={e => e.preventDefault()} onClick={addTable}>AVCARD Table</button>}
+    </div>
+    <div ref={ref} className={'richContent ' + (multiline ? 'multiline' : '')} contentEditable suppressContentEditableWarning data-placeholder={placeholder || ''} onInput={e => onChange(e.currentTarget.innerHTML)} />
+  </div>
 }
+
 function Templates({ templates, setTemplates, customers, deals, notify }: { templates: Template[]; setTemplates: (t: Template[]) => void; customers: Customer[]; deals: Deal[]; notify: (s: string) => void }) {
   const [editing, setEditing] = useState<Template | null>(null); const [open, setOpen] = useState(false); const [templateTab, setTemplateTab] = useState<'FBO' | 'Customer'>('FBO')
   const [name, setName] = useState(''); const [type, setType] = useState<'Customer' | 'FBO'>('Customer'); const [customerIds, setCustomerIds] = useState<number[]>([]); const [subject, setSubject] = useState(''); const [body, setBody] = useState('')
