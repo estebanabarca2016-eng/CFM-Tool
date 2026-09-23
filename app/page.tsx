@@ -245,7 +245,7 @@ export default function App() {
     <aside className={mobile ? 'sidebar open' : 'sidebar'}><Logo /><div className="sideNav">{nav.map(([p, sub, Icon]) => <button key={p} className={page === p ? 'navItem active' : 'navItem'} onClick={() => { setPage(p); setMobile(false) }}><Icon size={18} /><span>{p}</span><small>{sub}</small>{p === 'Alerts' && avcardAlerts.length > 0 && <em className="navAlertBadge">{avcardAlerts.length}</em>}</button>)}</div><div className="sideFoot"><div className="connected"><span></span><div><b>Operations</b><small>System connected</small></div></div><div className="tagline">AVIATION<br />FUELS<br />PEOPLE<br />POSSIBILITIES™</div></div></aside>
     <main className="main"><header><button className="hamb" onClick={() => setMobile(!mobile)}><Menu /></button><button className="iconBtn topAlertBtn" onClick={() => { setPage('Alerts'); notify('Opening alerts') }} aria-label="Alerts"><Bell size={19} /><em>{avcardAlerts.length}</em></button></header>
       <div className="content">{page !== 'Dashboard' && <div className="pageTitle"><div><h1>{title}</h1><p>{page === 'Schedule Processor' ? 'Paste your Excel schedule, review the communications that will be generated, and confirm.' : page === 'Customer Deals' ? 'Create the pricing deals and programs that can be assigned to customers.' : 'Manage aviation fuel operations, schedules and communications.'}</p></div></div>}
-        {page === 'Dashboard' && <Dashboard emails={emails} emailType={emailType} setEmailType={setEmailType} selectedEmail={selectedEmail} setSelectedEmail={setSelectedEmail} notify={notify} routeInfo={routeInfo} />}
+        {page === 'Dashboard' && <Dashboard emails={emails} emailType={emailType} setEmailType={setEmailType} selectedEmail={selectedEmail} setSelectedEmail={setSelectedEmail} notify={notify} routeInfo={routeInfo} fbos={fbos} />}
         {page === 'Schedule Processor' && <ScheduleProcessor schedule={schedule} setSchedule={setSchedule} notify={notify} deals={deals} customers={customers} aircraft={aircraft} templates={templates} setGeneratedEmails={setGeneratedEmails} setPage={setPage} />}
         {page === 'Customer Deals' && <CustomerDeals deals={deals} setDeals={setDeals} notify={notify} />}
         {page === 'Customers' && <Customers customers={customers} setCustomers={setCustomers} deals={deals} notify={notify} />}
@@ -302,15 +302,50 @@ function parseSchedule(value: string) {
 }
 function Stat({ icon: Icon, label, value, detail }: { icon: any; label: string; value: string; detail: string }) { return <div className="stat"><div className="statIcon"><Icon size={20} /></div><div><b>{value}</b><span>{label}</span><small>{detail}</small></div></div> }
 
-function Dashboard({ emails, emailType, setEmailType, selectedEmail, setSelectedEmail, notify, routeInfo }: { emails: Email[]; emailType: 'FBO' | 'Customer'; setEmailType: (t: 'FBO' | 'Customer') => void; selectedEmail: Email | null; setSelectedEmail: (e: Email | null) => void; notify: (s: string) => void; routeInfo: { rows: string[][] } }) {
-  const active = routeInfo.rows[0] || ['1024', 'Sep 17, 2026', '08:30', 'N123AB', 'KMIA', 'Miami', 'KTEB', 'Teterboro', '02:45', '3', 'Sep 17, 2026', '11:15', '1', 'ABC Aviation', 'John Smith', 'Signature']
-  const customer = active[13] || 'ABC Aviation', tail = active[3] || 'N123AB', fbo = active[15] || 'Signature', dep = active[4] || 'KMIA', arr = active[6] || 'KTEB'
-  const route = routeInfo.rows.length ? Array.from(new Set(routeInfo.rows.flatMap(r => [r[4], r[6]].filter(Boolean)))).join(' → ') : 'KMIA → KTEB → KMIA'
-  const currentSelected = selectedEmail && emails.some(e => e.id === selectedEmail.id) ? selectedEmail : (emails[0] || null)
+function Dashboard({ emails, emailType, setEmailType, selectedEmail, setSelectedEmail, notify, routeInfo, fbos }: { emails: Email[]; emailType: 'FBO' | 'Customer'; setEmailType: (t: 'FBO' | 'Customer') => void; selectedEmail: Email | null; setSelectedEmail: (e: Email | null) => void; notify: (s: string) => void; routeInfo: { rows: string[][] }; fbos: FBO[] }) {
+  const active = routeInfo.rows[0] || Array(16).fill('')
+  const hasSchedule = routeInfo.rows.length > 0
+  const customer = active[13] || '', tail = active[3] || '', fbo = active[15] || ''
+  const route = hasSchedule ? Array.from(new Set(routeInfo.rows.flatMap(r => [r[4], r[6]].filter(Boolean)))).join(' → ') : ''
+  const visibleEmails = emails.filter(e => e.type === emailType)
+  const currentSelected = selectedEmail && visibleEmails.some(e => e.id === selectedEmail.id) ? selectedEmail : (visibleEmails[0] || null)
+  const [selectedFboByEmail, setSelectedFboByEmail] = useState<Record<number, number | null>>({})
+  const selectedFbo = currentSelected?.type === 'FBO' ? fbos.find(f => f.id === (selectedFboByEmail[currentSelected.id] || null)) || null : null
+
+  const matchingFbos = useMemo(() => {
+    if (!currentSelected || currentSelected.type !== 'FBO') return []
+    const iata = String(currentSelected.iata || '').trim().toUpperCase()
+    const icao = String(currentSelected.icao || '').trim().toUpperCase()
+    return fbos.filter(f => (iata && f.iata.toUpperCase() === iata) || (icao && f.icao.toUpperCase() === icao))
+  }, [currentSelected, fbos])
+
+  useEffect(() => {
+    if (!currentSelected || currentSelected.type !== 'FBO') return
+    setSelectedFboByEmail(prev => {
+      if (prev[currentSelected.id] !== undefined) return prev
+      return { ...prev, [currentSelected.id]: matchingFbos.length === 1 ? matchingFbos[0].id : null }
+    })
+  }, [currentSelected?.id, currentSelected?.type, matchingFbos])
+
+  async function openInFront() {
+    if (!currentSelected || currentSelected.type !== 'FBO') return notify('Select an FBO email first')
+    if (!selectedFbo) return notify('Select an FBO from the location dropdown first')
+    const subject = stripHtml(currentSelected.subject)
+    const body = stripHtml(currentSelected.body)
+    const mailto = 'mailto:' + encodeURIComponent(selectedFbo.email) + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body)
+    try {
+      await navigator.clipboard.writeText('To: ' + selectedFbo.email + '\nSubject: ' + subject + '\n\n' + body)
+      notify('Recipient, subject and body copied. Opening Front…')
+    } catch {
+      notify('Opening Front…')
+    }
+    window.location.href = mailto
+  }
+
   return <>
     <div className="hero"><div><small className="heroBrand">CORPORATE FUEL MANAGEMENT</small><small>WELCOME TO</small><h2>Turn schedules<br />into action.</h2><p>Faster. Smarter. Together.</p></div><div className="planeGraphic">✈</div><div className="heroTag">AVIATION<br />FUELS<br />PEOPLE<br />POSSIBILITIES™</div></div>
-    <div className="stats"><Stat icon={Users} value={customer} label="Customer" detail="Current Schedule" /><Stat icon={Plane} value={tail} label="Tail" detail="1 aircraft" /><Stat icon={Activity} value={route} label="Route" detail={`${Math.max(1, route.split(' → ').length - 1)} legs`} /><Stat icon={Zap} value={fbo} label="FBO" detail="Primary FBO" /><Stat icon={CalendarDays} value={active[2] || '08:30'} label="ETD" detail={active[1] || 'Sep 17, 2026'} /><Stat icon={CalendarDays} value={active[11] || '11:15'} label="ETA" detail={active[10] || 'Sep 17, 2026'} /><Stat icon={Users} value={active[14] || 'John Smith'} label="Agent" detail={customer} /></div>
-    {emails.length > 0 && currentSelected && <div className="emailLayout"><div className="panel emailPanel"><div className="tabs"><button className={emailType === 'FBO' ? 'tab active' : 'tab'} onClick={() => { setEmailType('FBO'); setSelectedEmail(emails.find(e => e.type === 'FBO') || null) }}>FBO Emails ({emails.filter(e => e.type === 'FBO').length})</button><button className={emailType === 'Customer' ? 'tab active' : 'tab'} onClick={() => { setEmailType('Customer'); setSelectedEmail(emails.find(e => e.type === 'Customer') || null) }}>Customer Emails ({emails.filter(e => e.type === 'Customer').length})</button></div><div className="panelHead"><div><h3><Mail size={19} /> {emailType} Emails</h3><p>Click an email to preview the generated template.</p></div><div className="filters"><span><Search size={13} /> Search by ICAO, FBO, subject...</span><span>All Statuses⌄</span></div></div><div className="tableWrap"><table><thead><tr><th>ICAO</th><th>FBO</th><th>Subject</th><th>Aircraft</th><th>Date/Time</th><th>Status</th><th></th></tr></thead><tbody>{emails.filter(e => e.type === emailType).map(e => <tr key={e.id} className={currentSelected.id === e.id ? 'selectedRow' : ''} onClick={() => setSelectedEmail(e)}><td><b>{e.icao}</b></td><td>{e.fbo}</td><td>{stripHtml(e.subject)}</td><td>{e.tail}</td><td>{active[1] || 'Sep 17, 2026'} {active[2] || '08:30'}</td><td><span className="status ready"><i />{e.status}</span></td><td><button className="tiny" onClick={ev => { ev.stopPropagation(); setSelectedEmail(e) }}><Mail size={13} /></button></td></tr>)}</tbody></table></div></div><EmailPreview email={currentSelected} notify={notify} /></div>}
+    <div className="stats"><Stat icon={Users} value={customer} label="Customer" detail={hasSchedule ? 'Current Schedule' : ''} /><Stat icon={Plane} value={tail} label="Tail" detail={hasSchedule ? '1 aircraft' : ''} /><Stat icon={Activity} value={route} label="Route" detail={hasSchedule ? (Math.max(0, route.split(' → ').length - 1) + ' legs') : ''} /><Stat icon={Zap} value={fbo} label="FBO" detail={hasSchedule ? 'Primary FBO' : ''} /><Stat icon={CalendarDays} value={active[2] || ''} label="ETD" detail={hasSchedule ? (active[1] || '') : ''} /><Stat icon={CalendarDays} value={active[11] || ''} label="ETA" detail={hasSchedule ? (active[10] || '') : ''} /><Stat icon={Users} value={active[14] || ''} label="Agent" detail={hasSchedule ? customer : ''} /></div>
+    {emails.length > 0 && currentSelected && <div className="emailLayout"><div className="panel emailPanel"><div className="tabs"><button className={emailType === 'FBO' ? 'tab active' : 'tab'} onClick={() => { setEmailType('FBO'); setSelectedEmail(emails.find(e => e.type === 'FBO') || null) }}>FBO Emails ({emails.filter(e => e.type === 'FBO').length})</button><button className={emailType === 'Customer' ? 'tab active' : 'tab'} onClick={() => { setEmailType('Customer'); setSelectedEmail(emails.find(e => e.type === 'Customer') || null) }}>Customer Emails ({emails.filter(e => e.type === 'Customer').length})</button></div><div className="panelHead"><div><h3><Mail size={19} /> {emailType} Emails</h3><p>Click an email to preview the generated template.</p></div><div className="filters"><span><Search size={13} /> Search by ICAO, FBO, subject...</span><span>All Statuses⌄</span></div></div><div className="tableWrap"><table><thead><tr><th>ICAO</th><th>FBO</th><th>Subject</th><th>Aircraft</th><th>Date/Time</th><th>Status</th><th></th></tr></thead><tbody>{visibleEmails.map(e => <tr key={e.id} className={currentSelected.id === e.id ? 'selectedRow' : ''} onClick={() => setSelectedEmail(e)}><td><b>{e.icao}</b></td><td>{e.fbo}</td><td>{stripHtml(e.subject)}</td><td>{e.tail}</td><td>{active[1] || ''} {active[2] || ''}</td><td><span className="status ready"><i />{e.status}</span></td><td><button className="tiny" onClick={ev => { ev.stopPropagation(); setSelectedEmail(e) }}><Mail size={13} /></button></td></tr>)}</tbody></table></div></div><EmailPreview email={currentSelected} notify={notify} fbos={fbos} selectedFbo={selectedFbo} matchingFbos={matchingFbos} setSelectedFbo={id => currentSelected?.type === 'FBO' && setSelectedFboByEmail(prev => ({ ...prev, [currentSelected.id]: id }))} openInFront={openInFront} /></div>}
     <div className="panel recent"><div className="panelHead"><div><h3><FileText size={18} /> Recently Processed Schedules</h3><p>Schedules currently in your workspace</p></div></div><FlightTable rows={routeInfo.rows.length ? routeInfo.rows.map(r => [r[0], r[1], r[3], r[13], `${r[4] || ''} → ${r[6] || ''}`, r[2], r[11], cleanFboName(r[15] || '') , 'Ready']) : flights} /></div>
 
   </>
@@ -329,15 +364,25 @@ function copyRichText(html: string, notify: (s: string) => void, label: string) 
     navigator.clipboard.write([new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }), 'text/plain': new Blob([plain], { type: 'text/plain' }) })]).then(() => notify(label)).catch(() => navigator.clipboard?.writeText(plain).then(() => notify(label)))
   } else navigator.clipboard?.writeText(plain).then(() => notify(label))
 }
-function EmailPreview({ email, notify }: { email: Email; notify: (s: string) => void }) {
+function EmailPreview({ email, notify, fbos, selectedFbo, matchingFbos, setSelectedFbo, openInFront }: { email: Email; notify: (s: string) => void; fbos: FBO[]; selectedFbo: FBO | null; matchingFbos: FBO[]; setSelectedFbo: (id: number | null) => void; openInFront: () => void }) {
   return <div className="panel emailPreview">
     <div className="previewHead"><h3><Mail size={18} /> Email Preview</h3></div>
     <div className="previewBody">
-      <div className="previewField"><div className="previewLabel"><b>Subject</b><button className="copyBoxButton" onClick={() => copyRichText(email.subject, notify, 'Subject copied')}><Copy size={13} /> Copy</button></div><div className="copyBox subjectBox" dangerouslySetInnerHTML={{ __html: email.subject }} /></div>
-      <div className="previewField bodyField"><div className="previewLabel"><b>Email Body</b><button className="copyBoxButton" onClick={() => copyRichText(email.body, notify, 'Email body copied')}><Copy size={13} /> Copy</button></div><div className="copyBox bodyBox" dangerouslySetInnerHTML={{ __html: email.body }} /></div>
+      {email.type === 'FBO' && <div className="fboComposeBox">
+        <div className="fboComposeTitle"><b>FBO Email</b><span>{email.iata ? email.iata + ' / ' + email.icao : email.icao}</span></div>
+        <div className="fboComposeGrid">
+          <label>Location<select value={selectedFbo?.id || ''} onChange={e => setSelectedFbo(e.target.value ? Number(e.target.value) : null)}><option value="">Select FBO for this location...</option>{matchingFbos.map(f => <option key={f.id} value={f.id}>{f.name} — {f.email}</option>)}</select></label>
+          <div className="fboSelectedDetails"><span><b>FBO:</b> {selectedFbo?.name || '—'}</span><span><b>Email:</b> {selectedFbo?.email || '—'}</span><span><b>Phone:</b> {selectedFbo?.phone || '—'}</span></div>
+        </div>
+        {!matchingFbos.length && <small className="fieldHint">No FBOs are registered for this IATA/ICAO yet. Add one in FBOs.</small>}
+      </div>}
+      <div className="previewField"><div className="previewLabel"><b>Subject</b></div><div className="copyBox subjectBox" dangerouslySetInnerHTML={{ __html: email.subject }} /></div>
+      <div className="previewField bodyField"><div className="previewLabel"><b>Email Body</b></div><div className="copyBox bodyBox" dangerouslySetInnerHTML={{ __html: email.body }} /></div>
+      {email.type === 'FBO' && <button className="primary openFrontButton" onClick={openInFront}><Mail size={15} /> Open in Front</button>}
     </div>
   </div>
 }
+
 function FlightTable({ rows }: { rows: string[][] }) { return <div className="tableWrap"><table><thead><tr>{['Trip #', 'Date', 'Aircraft', 'Client', 'Route', 'ETD', 'ETA', 'FBO', 'Status', 'Actions'].map(h => <th key={h}>{h}</th>)}</tr></thead><tbody>{rows.map((r, i) => <tr key={i}>{r.map((c, j) => <td key={j}>{j === 8 ? <span className={'status ' + String(c).toLowerCase()}><i />{c}</span> : c}</td>)}<td><button className="tiny"><Mail size={13} /></button><button className="tiny"><FileText size={13} /></button></td></tr>)}</tbody></table></div> }
 
 
@@ -380,7 +425,7 @@ function buildCommunications(rows: string[][], customers: Customer[], aircraft: 
     const tid=fboSelections[code]; const template=tid?templates.find(t=>t.id===tid&&t.type==='FBO'):undefined; if(!template)continue
     const tailAircraft=aircraftByTail(r[3])||matchedAircraft; const tail=tailAircraft?.tail||String(r[3]||'').trim()
     const values:Record<string,string>={TRIP_NUMBER:r[0]||'',TAIL:tail,ROUTE:`${String(r[4]||'').toUpperCase()}${r[6]?` → ${String(r[6]).toUpperCase()}`:''}`,DEPARTURE_DATE:r[1]||'',ETD:r[2]||'',ETA:r[11]||'',FBO:cleanFboName(r[15]||''),AGENT:r[14]||'',CUSTOMER:customer?.name||'',ICAO:code,DEPARTURE_ICAO:String(r[4]||'').toUpperCase(),ARRIVAL_ICAO:String(r[6]||'').toUpperCase(),...airportValues(code),DEPARTURE_AIRPORT:r[5]||'',ARRIVAL_AIRPORT:r[7]||'',FT:r[8]||'',CREW:r[9]||'',ARRIVAL_DATE:r[10]||r[1]||'',ARRIVAL_TIME:r[11]||'',DEPARTURE_DATE_ACTUAL:r[1]||'',DEPARTURE_TIME:r[2]||'',ARRIVAL_MONTH_DAY:formatMonthDay(r[10]||r[1]||''),DEPARTURE_MONTH_DAY:formatMonthDay(r[1]||''),LEG_NUMBER:r[12]||'',AVCARD:tailAircraft?.avcard?formatCardForEmail(tailAircraft.avcard):'',AVCARD_EXPIRATION:tailAircraft?.expiration||''}
-    emails.push({id:id++,type:'FBO',icao:code,fbo:cleanFboName(r[15]||''),tail,customer:customer?.name||'',subject:replaceTemplatePlaceholders(template.subject,values),body:replaceTemplatePlaceholders(template.body,values,'',tailAircraft),status:'Ready'})
+    emails.push({id:id++,type:'FBO',icao:code,iata:airportValues(code).IATA,fbo:cleanFboName(r[15]||''),tail,customer:customer?.name||'',subject:replaceTemplatePlaceholders(template.subject,values),body:replaceTemplatePlaceholders(template.body,values,'',tailAircraft),status:'Ready'})
   }
   return {emails,errors:Array.from(new Set(errors))}
 }
