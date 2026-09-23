@@ -334,11 +334,9 @@ function Dashboard({ emails, emailType, setEmailType, selectedEmail, setSelected
 
   const matchingFbos = useMemo(() => {
     if (!currentSelected || currentSelected.type !== 'FBO') return []
-    const iata = String(currentSelected.iata || '').trim().toUpperCase()
-    const icao = String(currentSelected.icao || '').trim().toUpperCase()
     if (isUsAirnav) return airnavFbos
     return []
-  }, [currentSelected, fbos, airnavFbos, isUsAirnav])
+  }, [currentSelected, airnavFbos, isUsAirnav])
 
   const selectedFbo = matchingFbos.find(f => f.id === selectedFboId) || null
 
