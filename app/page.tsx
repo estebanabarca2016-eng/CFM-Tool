@@ -357,7 +357,9 @@ function Dashboard({ emails, emailType, setEmailType, selectedEmail, setSelected
   }, [currentSelected, airnavFbos, isUsAirnav])
 
   const selectedFbo = matchingFbos.find(f => f.id === selectedFboId) || null
-  const recipientKey = currentSelected ? `${currentSelected.id}:${currentSelected.type === 'FBO' ? (selectedFboId || 'none') : 'customer'}` : ''
+  // Recipient state belongs to the individual generated email/draft, never to the
+  // currently selected FBO. Changing the FBO only changes the To address for this draft.
+  const recipientKey = currentSelected ? `${currentSelected.id}:${currentSelected.type}` : ''
   const toRecipients = currentSelected ? (recipientLists[recipientKey]?.to || []) : []
   const ccRecipients = currentSelected ? (recipientLists[recipientKey]?.cc || []) : []
 
@@ -371,6 +373,19 @@ function Dashboard({ emails, emailType, setEmailType, selectedEmail, setSelected
       return { ...prev, [recipientKey]: initial }
     })
   }, [recipientKey, currentSelected?.id, selectedFbo?.email])
+
+  function selectFboForCurrentEmail(id: number | null) {
+    if (!currentSelected || currentSelected.type !== 'FBO') return
+    setSelectedFboByEmail(prev => ({ ...prev, [currentSelected.id]: id }))
+    const fbo = matchingFbos.find(item => item.id === id)
+    setRecipientLists(prev => ({
+      ...prev,
+      [recipientKey]: {
+        to: fbo?.email ? [fbo.email] : [],
+        cc: prev[recipientKey]?.cc || currentSelected.ccEmails || []
+      }
+    }))
+  }
 
   useEffect(() => {
     if (!currentSelected || currentSelected.type !== 'FBO') return
@@ -418,7 +433,7 @@ function Dashboard({ emails, emailType, setEmailType, selectedEmail, setSelected
   return <>
     <div className="hero"><div><small className="heroBrand">CORPORATE FUEL MANAGEMENT</small><small>WELCOME TO</small><h2>Turn schedules<br />into action.</h2><p>Faster. Smarter. Together.</p></div><div className="planeGraphic">✈</div><div className="heroTag">AVIATION<br />FUELS<br />PEOPLE<br />POSSIBILITIES™</div></div>
     <div className="stats"><Stat icon={Users} value={customer} label="Customer" detail={hasSchedule ? 'Current Schedule' : ''} /><Stat icon={Plane} value={tail} label="Tail" detail={hasSchedule ? '1 aircraft' : ''} /><Stat icon={Activity} value={route} label="Route" detail={hasSchedule ? (Math.max(0, route.split(' → ').length - 1) + ' legs') : ''} /><Stat icon={Zap} value={fbo} label="FBO" detail={hasSchedule ? 'Primary FBO' : ''} /><Stat icon={CalendarDays} value={active[2] || ''} label="ETD" detail={hasSchedule ? (active[1] || '') : ''} /><Stat icon={CalendarDays} value={active[11] || ''} label="ETA" detail={hasSchedule ? (active[10] || '') : ''} /><Stat icon={Users} value={active[14] || ''} label="Agent" detail={hasSchedule ? customer : ''} /></div>
-    {emails.length > 0 && currentSelected && <div className="emailLayout"><div className="panel emailPanel"><div className="tabs"><button className={emailType === 'FBO' ? 'tab active' : 'tab'} onClick={() => { setEmailType('FBO'); setSelectedEmail(emails.find(e => e.type === 'FBO') || null) }}>FBO Emails ({emails.filter(e => e.type === 'FBO').length})</button><button className={emailType === 'Customer' ? 'tab active' : 'tab'} onClick={() => { setEmailType('Customer'); setSelectedEmail(emails.find(e => e.type === 'Customer') || null) }}>Customer Emails ({emails.filter(e => e.type === 'Customer').length})</button></div><div className="panelHead"><div><h3><Mail size={19} /> {emailType} Emails</h3><p>Click an email to preview the generated template.</p></div><div className="filters"><span><Search size={13} /> Search by ICAO, FBO, subject...</span><span>All Statuses⌄</span></div></div><div className="tableWrap"><table><thead><tr><th>ICAO</th><th>FBO</th><th>Subject</th><th>Aircraft</th><th>Date/Time</th><th>Status</th><th></th></tr></thead><tbody>{visibleEmails.map(e => <tr key={e.id} className={currentSelected.id === e.id ? 'selectedRow' : ''} onClick={() => setSelectedEmail(e)}><td><b>{e.icao}</b></td><td>{e.fbo}</td><td>{stripHtml(e.subject)}</td><td>{e.tail}</td><td>{active[1] || ''} {active[2] || ''}</td><td><span className="status ready"><i />{e.status}</span></td><td><button className="tiny" onClick={ev => { ev.stopPropagation(); setSelectedEmail(e) }}><Mail size={13} /></button></td></tr>)}</tbody></table></div></div><EmailPreview email={currentSelected} notify={notify} selectedFbo={selectedFbo} matchingFbos={matchingFbos} setSelectedFbo={id => currentSelected?.type === 'FBO' && setSelectedFboByEmail(prev => ({ ...prev, [currentSelected.id]: id }))} openInFront={openInFront} toRecipients={toRecipients} ccRecipients={ccRecipients} updateRecipients={updateRecipients} airnavLoading={airnavLoading} airnavError={airnavError} isUsAirnav={isUsAirnav} /></div>}
+    {emails.length > 0 && currentSelected && <div className="emailLayout"><div className="panel emailPanel"><div className="tabs"><button className={emailType === 'FBO' ? 'tab active' : 'tab'} onClick={() => { setEmailType('FBO'); setSelectedEmail(emails.find(e => e.type === 'FBO') || null) }}>FBO Emails ({emails.filter(e => e.type === 'FBO').length})</button><button className={emailType === 'Customer' ? 'tab active' : 'tab'} onClick={() => { setEmailType('Customer'); setSelectedEmail(emails.find(e => e.type === 'Customer') || null) }}>Customer Emails ({emails.filter(e => e.type === 'Customer').length})</button></div><div className="panelHead"><div><h3><Mail size={19} /> {emailType} Emails</h3><p>Click an email to preview the generated template.</p></div><div className="filters"><span><Search size={13} /> Search by ICAO, FBO, subject...</span><span>All Statuses⌄</span></div></div><div className="tableWrap"><table><thead><tr><th>ICAO</th><th>FBO</th><th>Subject</th><th>Aircraft</th><th>Date/Time</th><th>Status</th><th></th></tr></thead><tbody>{visibleEmails.map(e => <tr key={e.id} className={currentSelected.id === e.id ? 'selectedRow' : ''} onClick={() => setSelectedEmail(e)}><td><b>{e.icao}</b></td><td>{e.fbo}</td><td>{stripHtml(e.subject)}</td><td>{e.tail}</td><td>{active[1] || ''} {active[2] || ''}</td><td><span className="status ready"><i />{e.status}</span></td><td><button className="tiny" onClick={ev => { ev.stopPropagation(); setSelectedEmail(e) }}><Mail size={13} /></button></td></tr>)}</tbody></table></div></div><EmailPreview email={currentSelected} notify={notify} selectedFbo={selectedFbo} matchingFbos={matchingFbos} setSelectedFbo={selectFboForCurrentEmail} openInFront={openInFront} toRecipients={toRecipients} ccRecipients={ccRecipients} updateRecipients={updateRecipients} airnavLoading={airnavLoading} airnavError={airnavError} isUsAirnav={isUsAirnav} /></div>}
     <div className="panel recent"><div className="panelHead"><div><h3><FileText size={18} /> Recently Processed Schedules</h3><p>Schedules currently in your workspace</p></div></div><FlightTable rows={routeInfo.rows.length ? routeInfo.rows.map(r => [r[0], r[1], r[3], r[13], `${r[4] || ''} → ${r[6] || ''}`, r[2], r[11], cleanFboName(r[15] || '') , 'Ready']) : flights} /></div>
 
   </>
