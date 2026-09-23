@@ -223,7 +223,7 @@ function Logo() { return <div className="logo"><img src="/world-fuel-services-lo
 
 export default function App() {
   const [page, setPage] = useState<Page>('Dashboard')
-  const [profile, setProfile] = useState<Profile>('Supervisor')
+  const [profile, setProfile] = useState<Profile>('Dispatcher')
   const [mobile, setMobile] = useState(false)
   useEffect(() => {
     const saved = window.localStorage.getItem('cfm-profile')
@@ -232,10 +232,10 @@ export default function App() {
   useEffect(() => { window.localStorage.setItem('cfm-profile', profile) }, [profile])
   function changeProfile(next: Profile) {
     setProfile(next)
-    if (next === 'Dispatcher' && !['Dashboard', 'Schedule Processor'].includes(page)) setPage('Dashboard')
+    if (next === 'Dispatcher' && !['Dashboard', 'Schedule Processor', 'Settings'].includes(page)) setPage('Dashboard')
     setMobile(false)
   }
-  const visibleNav = profile === 'Dispatcher' ? nav.filter(([p]) => p === 'Dashboard' || p === 'Schedule Processor') : nav
+  const visibleNav = profile === 'Dispatcher' ? nav.filter(([p]) => p === 'Dashboard' || p === 'Schedule Processor' || p === 'Settings') : nav
   const [query, setQuery] = useState('')
   const [schedule, setSchedule] = useState('')
   const [generatedEmails, setGeneratedEmails] = useState<Email[]>([])
