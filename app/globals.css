@@ -147,3 +147,19 @@
 .sizeTool{height:27px;display:flex;align-items:center;gap:2px;padding:2px;border:1px solid #d4e0ea;background:#fff;border-radius:6px}.sizeTool button{border:0!important;background:transparent!important;color:#31516d!important;padding:0!important;width:20px;height:21px;font-size:13px!important}.sizeTool span{min-width:18px;text-align:center;font-size:9px;font-weight:800;color:#173b5b}
 .placeholderSelect{height:29px!important;line-height:1.15!important;box-sizing:border-box;border:1px solid #cfe0ee;border-radius:6px;background:#fff;color:#1767c5;padding:5px 9px!important;font-size:9px!important;font-weight:800;cursor:pointer;max-width:165px;min-width:145px;vertical-align:middle}.placeholderSelect:focus{outline:2px solid #cfe3f7}
 @media(max-width:760px){.templateTabs{width:100%}.templateTab{flex:1}.richToolbar{overflow-x:auto}.placeholderSelect{max-width:125px}}
+
+
+/* Profile access */
+.profileSwitcher{display:flex;align-items:center;gap:6px;margin-left:auto;margin-right:10px;font-size:9px;font-weight:800;color:#6d8093}
+.profileSwitcher select{height:30px;border:1px solid #d4e0ea;border-radius:7px;background:#fff;color:#1b4f78;padding:4px 9px;font-size:9px;font-weight:800;outline:none}
+.profileSwitcher select:focus{outline:2px solid #cfe3f7}
+.profileCards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:14px}
+.profileCard{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;text-align:left;border:1px solid #d8e4ee;background:#fff;border-radius:10px;padding:14px;cursor:pointer;color:#5e7388;transition:.18s ease}
+.profileCard:hover{border-color:#a9c8e5;background:#f8fbff}
+.profileCard.active{border-color:#0875e8;background:#f3f8fe;box-shadow:0 5px 14px rgba(8,117,232,.10);color:#1767c5}
+.profileCard b{display:block;font-size:11px;color:#173b5b;margin-bottom:5px}
+.profileCard.active b{color:#1265c8}
+.profileCard small{display:block;font-size:8px;line-height:1.45;color:#718398}
+.profileCard>svg{flex:0 0 auto;opacity:.2;color:#1767c5}
+.profileCard.active>svg{opacity:1}
+@media(max-width:760px){.profileCards{grid-template-columns:1fr}.profileSwitcher span{display:none}.profileSwitcher{margin-right:6px}}

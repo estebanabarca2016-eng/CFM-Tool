@@ -4,6 +4,7 @@ import * as XLSX from 'xlsx'
 import { Activity, AlertTriangle, Bell, CalendarDays, Check, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, Copy, Download as DownloadIcon, Edit3, FileText, LayoutDashboard, Mail, Menu, Plane, Plus, Search, Send, Settings, Sparkles, Trash2, Upload, Users, X, Zap } from 'lucide-react'
 
 type Page = 'Dashboard' | 'Schedule Processor' | 'Customers' | 'Aircraft' | 'Templates' | 'Airports' | 'Alerts' | 'Settings'
+type Profile = 'Supervisor' | 'Dispatcher'
 type Deal = { id: number; name: string; provider: string; description: string; color: string; tankering: boolean }
 type Customer = { id: number; name: string; dealIds: number[]; rule: string; includeTripNumber: boolean; homeBase: string }
 type Aircraft = { id: number; tail: string; type: string; customerId: number | null; homeBase: string; avcard: string; expiration: string; active: boolean }
@@ -222,7 +223,19 @@ function Logo() { return <div className="logo"><img src="/world-fuel-services-lo
 
 export default function App() {
   const [page, setPage] = useState<Page>('Dashboard')
+  const [profile, setProfile] = useState<Profile>('Supervisor')
   const [mobile, setMobile] = useState(false)
+  useEffect(() => {
+    const saved = window.localStorage.getItem('cfm-profile')
+    if (saved === 'Supervisor' || saved === 'Dispatcher') setProfile(saved)
+  }, [])
+  useEffect(() => { window.localStorage.setItem('cfm-profile', profile) }, [profile])
+  function changeProfile(next: Profile) {
+    setProfile(next)
+    if (next === 'Dispatcher' && !['Dashboard', 'Schedule Processor'].includes(page)) setPage('Dashboard')
+    setMobile(false)
+  }
+  const visibleNav = profile === 'Dispatcher' ? nav.filter(([p]) => p === 'Dashboard' || p === 'Schedule Processor') : nav
   const [query, setQuery] = useState('')
   const [schedule, setSchedule] = useState('')
   const [generatedEmails, setGeneratedEmails] = useState<Email[]>([])
@@ -244,15 +257,15 @@ export default function App() {
   const emails = generatedEmails
 
   return <div className="shell">
-    <aside className={mobile ? 'sidebar open' : 'sidebar'}><Logo /><div className="sideNav">{nav.map(([p, sub, Icon]) => <button key={p} className={page === p ? 'navItem active' : 'navItem'} onClick={() => { setPage(p); setMobile(false) }}><Icon size={18} /><span>{p}</span><small>{sub}</small>{p === 'Alerts' && avcardAlerts.length > 0 && <em className="navAlertBadge">{avcardAlerts.length}</em>}</button>)}</div><div className="sideFoot"><div className="connected"><span></span><div><b>Operations</b><small>System connected</small></div></div><div className="tagline">AVIATION<br />FUELS<br />PEOPLE<br />POSSIBILITIES™</div></div></aside>
-    <main className="main"><header><button className="hamb" onClick={() => setMobile(!mobile)}><Menu /></button><button className="iconBtn topAlertBtn" onClick={() => { setPage('Alerts'); notify('Opening alerts') }} aria-label="Alerts"><Bell size={19} /><em>{avcardAlerts.length}</em></button></header>
+    <aside className={mobile ? 'sidebar open' : 'sidebar'}><Logo /><div className="sideNav">{visibleNav.map(([p, sub, Icon]) => <button key={p} className={page === p ? 'navItem active' : 'navItem'} onClick={() => { setPage(p); setMobile(false) }}><Icon size={18} /><span>{p}</span><small>{sub}</small>{p === 'Alerts' && avcardAlerts.length > 0 && <em className="navAlertBadge">{avcardAlerts.length}</em>}</button>)}</div><div className="sideFoot"><div className="connected"><span></span><div><b>Operations</b><small>System connected</small></div></div><div className="tagline">AVIATION<br />FUELS<br />PEOPLE<br />POSSIBILITIES™</div></div></aside>
+    <main className="main"><header><button className="hamb" onClick={() => setMobile(!mobile)}><Menu /></button><div className="profileSwitcher"><span>Profile</span><select value={profile} onChange={e => changeProfile(e.target.value as Profile)} aria-label="Select profile"><option value="Supervisor">Supervisor</option><option value="Dispatcher">Dispatcher</option></select></div><button className="iconBtn topAlertBtn" onClick={() => { setPage('Alerts'); notify('Opening alerts') }} aria-label="Alerts"><Bell size={19} /><em>{avcardAlerts.length}</em></button></header>
       <div className="content">{page !== 'Dashboard' && <div className="pageTitle"><div><h1>{title}</h1><p>{page === 'Schedule Processor' ? 'Paste your Excel schedule, review the communications that will be generated, and confirm.' : 'Manage aviation fuel operations, schedules and communications.'}</p></div></div>}
         {page === 'Dashboard' && <Dashboard emails={emails} emailType={emailType} setEmailType={setEmailType} selectedEmail={selectedEmail} setSelectedEmail={setSelectedEmail} notify={notify} routeInfo={routeInfo} />}
         {page === 'Schedule Processor' && <ScheduleProcessor schedule={schedule} setSchedule={setSchedule} notify={notify} deals={deals} customers={customers} aircraft={aircraft} templates={templates} contacts={contacts} setGeneratedEmails={setGeneratedEmails} setPage={setPage} />}
         
         {page === 'Customers' && <Customers customers={customers} setCustomers={setCustomers} deals={deals} setDeals={setDeals} contacts={contacts} setContacts={setContacts} notify={notify} />}
         {page === 'Aircraft' && <AircraftPage aircraft={aircraft} setAircraft={setAircraft} customers={customers} deals={deals} notify={notify} />}
-        {page === 'Templates' && <Templates templates={templates} setTemplates={setTemplates} customers={customers} deals={deals} notify={notify} />}{page === 'Airports' && <Airports notify={notify} />}{page === 'Alerts' && <Alerts alerts={avcardAlerts} />}{page === 'Settings' && <SettingsPage notify={notify} customers={customers} setCustomers={setCustomers} contacts={contacts} setContacts={setContacts} aircraft={aircraft} setAircraft={setAircraft} deals={deals} setDeals={setDeals} templates={templates} setTemplates={setTemplates} schedule={schedule} setSchedule={setSchedule} generatedEmails={generatedEmails} setGeneratedEmails={setGeneratedEmails} setSelectedEmail={setSelectedEmail} />}
+        {page === 'Templates' && <Templates templates={templates} setTemplates={setTemplates} customers={customers} deals={deals} notify={notify} />}{page === 'Airports' && <Airports notify={notify} />}{page === 'Alerts' && <Alerts alerts={avcardAlerts} />}{page === 'Settings' && <SettingsPage profile={profile} setProfile={changeProfile} notify={notify} customers={customers} setCustomers={setCustomers} contacts={contacts} setContacts={setContacts} aircraft={aircraft} setAircraft={setAircraft} deals={deals} setDeals={setDeals} templates={templates} setTemplates={setTemplates} schedule={schedule} setSchedule={setSchedule} generatedEmails={generatedEmails} setGeneratedEmails={setGeneratedEmails} setSelectedEmail={setSelectedEmail} />}
       </div></main>{toast && <div className="toast"><CheckCircle2 size={17} />{toast}</div>}
   </div>
 }
@@ -727,8 +740,7 @@ function parseExcelBoolean(value: unknown, defaultValue = false) { const text=St
 function excelList(value: unknown) { return String(value??'').split(/[;\n]/).map(v=>v.trim()).filter(Boolean) }
 function numberId(value: unknown, fallback: number) { const parsed=Number(value); return Number.isFinite(parsed)&&parsed>0?parsed:fallback }
 
-function SettingsPage({ notify, customers, setCustomers, contacts, setContacts, aircraft, setAircraft, deals, setDeals, templates, setTemplates, schedule, setSchedule, generatedEmails, setGeneratedEmails, setSelectedEmail }: { notify:(s:string)=>void; customers:Customer[]; setCustomers:(c:Customer[])=>void; contacts:Contact[]; setContacts:(c:Contact[])=>void; aircraft:Aircraft[]; setAircraft:(a:Aircraft[])=>void; deals:Deal[]; setDeals:(d:Deal[])=>void; templates:Template[]; setTemplates:(t:Template[])=>void; schedule:string; setSchedule:(s:string)=>void; generatedEmails:Email[]; setGeneratedEmails:(e:Email[])=>void; setSelectedEmail:(e:Email|null)=>void }) {
-  const [toggles,setToggles]=useState([true,true,true,true,false,true])
+function SettingsPage({ profile, setProfile, notify, customers, setCustomers, contacts, setContacts, aircraft, setAircraft, deals, setDeals, templates, setTemplates, schedule, setSchedule, generatedEmails, setGeneratedEmails, setSelectedEmail }: { profile:Profile; setProfile:(p:Profile)=>void; notify:(s:string)=>void; customers:Customer[]; setCustomers:(c:Customer[])=>void; contacts:Contact[]; setContacts:(c:Contact[])=>void; aircraft:Aircraft[]; setAircraft:(a:Aircraft[])=>void; deals:Deal[]; setDeals:(d:Deal[])=>void; templates:Template[]; setTemplates:(t:Template[])=>void; schedule:string; setSchedule:(s:string)=>void; generatedEmails:Email[]; setGeneratedEmails:(e:Email[])=>void; setSelectedEmail:(e:Email|null)=>void }) {
   function appendSheet(wb:XLSX.WorkBook, rows:unknown[][], name:string){XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rows),name)}
   function makeWorkbook(sample=false){
     const wb=XLSX.utils.book_new()
@@ -764,6 +776,6 @@ function SettingsPage({ notify, customers, setCustomers, contacts, setContacts, 
   }
   return <div className="settingsGrid">
     <div className="panel settingSection"><h3>Excel Data Backup</h3><p className="fieldHint">Download your current CFM data as a multi-sheet Excel workbook, or import it later to restore the data.</p><div className="excelActions"><button className="primary" onClick={()=>downloadWorkbook(false)}><DownloadIcon size={15}/>Download Current Data</button><button className="secondary" onClick={()=>downloadWorkbook(true)}><FileText size={15}/>Download Excel Template</button><label className="secondary fileImportButton"><Upload size={15}/>Import Excel Backup<input type="file" accept=".xlsx,.xls" onChange={e=>{const file=e.target.files?.[0];if(file)void importWorkbook(file);e.currentTarget.value='' }}/></label></div><div className="backupSheets"><b>Worksheets</b><span>Customers</span><span>Customer Contacts</span><span>Aircraft</span><span>Customer Deals</span><span>Templates</span><span>Schedule</span><span>Generated Emails</span></div></div>
-    <div className="panel settingSection"><h3>System Preferences</h3>{['Enable schedule validation','Auto-detect customers','Generate FBO communications','Enable tankering alerts','Send copy to internal team','Save schedule history'].map((x,i)=><div className="toggleRow" key={x}><div><b>{x}</b><small>Workflow preference</small></div><button className={toggles[i]?'toggle on':'toggle'} onClick={()=>setToggles(t=>t.map((v,j)=>j===i?!v:v))}><i/></button></div>)}<button className="danger" onClick={()=>notify('No data was deleted in this prototype')}>Clear Local Test Data</button></div>
+    <div className="panel settingSection"><h3>Profile Access</h3><p className="fieldHint">Choose the operating profile for this workstation. Both profiles use the same customers, aircraft, templates, airports and other CFM data.</p><div className="profileCards"><button type="button" className={profile==='Supervisor'?'profileCard active':'profileCard'} onClick={()=>setProfile('Supervisor')}><div><b>Supervisor</b><small>Full access to Dashboard, Schedule Processor, Customers, Aircraft, Templates, Airports, Alerts and Settings.</small></div><Check size={16}/></button><button type="button" className={profile==='Dispatcher'?'profileCard active':'profileCard'} onClick={()=>setProfile('Dispatcher')}><div><b>Dispatcher</b><small>Access limited to Dashboard and Schedule Processor. Schedule processing still uses the supervisor's shared data.</small></div><Check size={16}/></button></div></div>
   </div>
 }
