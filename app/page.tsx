@@ -225,6 +225,7 @@ export default function App() {
   const [schedule, setSchedule] = useState('')
   const [generatedEmails, setGeneratedEmails] = useState<Email[]>([])
   const [toast, setToast] = useState('')
+  const [toastType, setToastType] = useState<'success' | 'error'>('success')
   const [deals, setDeals] = useState<Deal[]>(initialDeals)
   const [customers, setCustomers] = useState<Customer[]>(initialCustomers)
   const [aircraft, setAircraft] = useState<Aircraft[]>(initialAircraft)
@@ -236,7 +237,7 @@ export default function App() {
   useEffect(() => { const timer = window.setInterval(() => setAlertTick(t => t + 1), 24 * 60 * 60 * 1000); return () => window.clearInterval(timer) }, [])
   const avcardAlerts = useMemo(() => buildAvcardAlerts(aircraft, customers), [aircraft, customers, alertTick])
 
-  function notify(message: string) { setToast(message); window.setTimeout(() => setToast(''), 2200) }
+  function notify(message: string, type: 'success' | 'error' = 'success') { setToastType(type); setToast(message); window.setTimeout(() => setToast(''), 2200) }
   const title = page === 'Dashboard' ? '' : page
   const routeInfo = useMemo(() => parseSchedule(schedule), [schedule])
   const emails = generatedEmails
@@ -251,7 +252,7 @@ export default function App() {
         {page === 'Customers' && <Customers customers={customers} setCustomers={setCustomers} deals={deals} notify={notify} />}
         {page === 'Aircraft' && <AircraftPage aircraft={aircraft} setAircraft={setAircraft} customers={customers} deals={deals} notify={notify} />}
         {page === 'Templates' && <Templates templates={templates} setTemplates={setTemplates} customers={customers} deals={deals} notify={notify} />}{page === 'Airports' && <Airports notify={notify} />}{page === 'FBOs' && <FBOs fbos={fbos} setFbos={setFbos} notify={notify} />}{page === 'Alerts' && <Alerts alerts={avcardAlerts} />}{page === 'Settings' && <SettingsPage notify={notify} />}
-      </div></main>{toast && <div className="toast"><CheckCircle2 size={17} />{toast}</div>}
+      </div></main>{toast && <div className={'toast ' + toastType}><CheckCircle2 size={17} />{toast}</div>}
   </div>
 }
 
@@ -512,7 +513,7 @@ function ScheduleProcessor({ schedule, setSchedule, notify, deals, customers, ai
   function confirm(){
     if(!allFboTemplatesSelected){
       setReviewTab('FBO')
-      return notify('Select an FBO template for every location, or discard that location, before continuing')
+      return notify('No FBO template selected', 'error')
     }
     const customerEmail=communications.find(e=>e.type==='Customer')
     const fbos=communications.filter(e=>e.type==='FBO')
@@ -527,7 +528,7 @@ function ScheduleProcessor({ schedule, setSchedule, notify, deals, customers, ai
       <div className="tabs"><button className={reviewTab==='Customer'?'tab active':'tab'} onClick={()=>setReviewTab('Customer')}><Mail size={15}/> Customer Email (1)</button><button className={reviewTab==='FBO'?'tab active':'tab'} onClick={()=>setReviewTab('FBO')}><Mail size={15}/> FBO Emails ({visible.length})</button></div>{reviewTab==='Customer'&&<div className="tripReview"><div className="tripReviewHead"><div><h3>Customer Email</h3><p>{customerTemplate ? 'Exactly one customer email is generated for the pasted schedule.' : 'No customer email is available for this schedule. You can still proceed with FBO emails.'}</p></div></div><div className="reviewEmails">{communications.filter(e=>e.type==='Customer').map(e=><div className="reviewEmailCard" key={e.id}><div><span className="pill">CUSTOMER</span><h3>{e.customer}</h3><p><b>Subject:</b> {e.subject}</p></div><button className="secondary" onClick={()=>setPreviewId(previewId===e.id?null:e.id)}><Mail size={14}/> {previewId===e.id?'Hide Preview':'Preview'}</button>{previewId===e.id&&<EmailReviewContent email={e} notify={notify}/>}</div>)}</div></div>}
       {reviewTab==='FBO'&&<div className="tripReview"><div className="tripReviewHead"><div><h3>FBO Emails</h3><p>Every location is included initially, including the starting location. Select the deal/template, check it when ready, or discard it.</p></div></div><div className="tripReviewList">{visible.map(({icao,row})=>{const opts=options(icao);const selected=fboSelections[icao]||'';const airport=airportData.find(a=>a.icao===icao);return <div className="tripReviewCard" key={icao}><div className="tripReviewTop"><div><span className="pill">FBO</span><h3>{airport?.city||row[7]||row[5]||icao} <small>({icao})</small></h3><p>{cleanFboName(row[15]||'')||'FBO not specified'} · {customer?.name||'Customer not found'}</p></div><div style={{display:'flex',gap:8}}><button className={ready.has(icao)?'primary':'secondary'} title="Mark ready" onClick={()=>selected?setReady(s=>new Set([...s,icao])):notify('Select an FBO template first')}><Check size={15}/></button><button className="secondary" title="Discard location" onClick={()=>discard(icao)}><Trash2 size={15}/></button></div></div><div className="formGrid"><label className="wide">Which template should we use for this FBO?<select value={selected} onChange={e=>choose(icao,Number(e.target.value))}><option value="">Select template...</option>{opts.map(t=><option key={t.id} value={t.id}>{t.name}{t.dealIds.length?` — ${t.dealIds.map(id=>deals.find(d=>d.id===id)?.provider||'').filter(Boolean).join(', ')}`:' — General'}</option>)}</select>{!opts.length&&<small>No FBO templates are available yet. Create one under Templates, then return here.</small>}</label></div></div>})}</div></div>}
       {reviewTab==='FBO'&&<div className="reviewEmails"><h3 style={{margin:'4px 0 10px'}}>FBO Previews</h3>{communications.filter(e=>e.type==='FBO').map(e=><div className="reviewEmailCard" key={e.id}><div><span className="pill">FBO</span><h3>{e.icao} – {e.fbo||'FBO'}</h3><p><b>Subject:</b> {e.subject}</p></div><button className="secondary" onClick={()=>setPreviewId(previewId===e.id?null:e.id)}><Mail size={14}/> {previewId===e.id?'Hide Preview':'Preview'}</button>{previewId===e.id&&<EmailReviewContent email={e} notify={notify}/>}</div>)}</div>}
-      <div className="stepActions"><button className="secondary" onClick={back}>Back</button><button className="primary" onClick={confirm} disabled={!allFboTemplatesSelected}>Confirm & Go to Dashboard <ChevronRight size={15}/></button></div></>}
+      <div className="stepActions"><button className="secondary" onClick={back}>Back</button><button className="primary" onClick={confirm}>Confirm & Go to Dashboard <ChevronRight size={15}/></button></div></>}
   </div>
 }
 function EmailReviewContent({email,notify}:{email:Email;notify:(s:string)=>void}){return <div className="reviewPreview"><div className="reviewCopyField"><div><b>Subject</b><button className="copyBoxButton" onClick={()=>copyRichText(email.subject,notify,'Subject copied')}><Copy size={12}/> Copy</button></div><div className="copyBox" dangerouslySetInnerHTML={{__html:email.subject}}/></div><div className="reviewCopyField"><div><b>Email Body</b><button className="copyBoxButton" onClick={()=>copyRichText(email.body,notify,'Email body copied')}><Copy size={12}/> Copy</button></div><div className="copyBox bodyBox" dangerouslySetInnerHTML={{__html:email.body}}/></div></div>}
