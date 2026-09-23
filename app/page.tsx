@@ -480,9 +480,9 @@ function EmailPreview({ email, notify, selectedFbo, matchingFbos, setSelectedFbo
     <div className="previewHead"><h3><Mail size={18} /> Email Preview</h3><span style={{fontSize:8,color:'#7b8b9f'}}>Editable draft</span></div>
     <div className="previewBody">
       {email.type === 'FBO' && <div className="fboComposeBox">
-        <div className="fboComposeTitle"><b>FBO Email</b><span>{email.airportLabel || (email.iata ? email.iata + ' / ' + email.icao : email.icao)} — <em>{email.fbo || 'FBO not specified'}</em></span></div>
+        <div className="fboComposeTitle"><b>FBO Email</b><span>{email.airportLabel || (email.iata ? email.iata + ' / ' + email.icao : email.icao)} <em className="scheduledFboInline">— {email.fbo || 'FBO not specified'}</em></span></div>
         <div className="fboComposeGrid">
-          <div className="fboScheduleNotice">The FBO selected for this location is: <b>{email.fbo || 'Not specified'}</b></div><label>FBO at this location<select value={selectedFbo?.id || ''} onChange={e => setSelectedFbo(e.target.value ? Number(e.target.value) : null)}><option value="">Select FBO...</option>{matchingFbos.map(f => <option key={f.id} value={f.id}>{f.name}{f.email ? ' — ' + f.email : ' — Email not listed'}</option>)}</select></label>
+          <label>FBO at this location<select value={selectedFbo?.id || ''} onChange={e => setSelectedFbo(e.target.value ? Number(e.target.value) : null)}><option value="">Select FBO...</option>{matchingFbos.map(f => <option key={f.id} value={f.id}>{f.name}{f.email ? ' — ' + f.email : ' — Email not listed'}</option>)}</select></label>
           <div className="fboSelectedDetails"><span><b>Source:</b> {isUsAirnav ? 'AirNav' : 'AirNav unavailable for non-U.S. airport'}</span><span><b>Phone:</b> {selectedFbo?.phone || '—'}</span></div>
         </div>
         {airnavLoading && <small className="fieldHint">Looking up available FBOs on AirNav…</small>}
@@ -569,7 +569,7 @@ function buildCommunications(rows: string[][], customers: Customer[], aircraft: 
     const routeCodesForFbo:string[]=[]; const routeSequenceForFbo=[rows[0]?.[4],...rows.map(row=>row[6])]; for(const raw of routeSequenceForFbo) { const routeCode=String(raw||'').trim().toUpperCase(); if(routeCode&&routeCodesForFbo[routeCodesForFbo.length-1]!==routeCode) routeCodesForFbo.push(routeCode) }
     const scheduledFbo=cleanFboName(rows.find(row=>String(row[4]||'').trim().toUpperCase()===code)?.[15]||r[15]||'')
     const values:Record<string,string>={TRIP_NUMBER:r[0]||'',TAIL:tail,ROUTE:routeCodesForFbo.join(' → '),DEPARTURE_DATE:r[1]||'',ETD:r[2]||'',ETA:r[11]||'',FBO:scheduledFbo,AGENT:r[14]||'',CUSTOMER:customer?.name||'',ICAO:code,DEPARTURE_ICAO:String(r[4]||'').toUpperCase(),ARRIVAL_ICAO:String(r[6]||'').toUpperCase(),...airportValues(code),DEPARTURE_AIRPORT:r[5]||'',ARRIVAL_AIRPORT:r[7]||'',FT:r[8]||'',CREW:r[9]||'',ARRIVAL_DATE:r[10]||r[1]||'',ARRIVAL_TIME:r[11]||'',DEPARTURE_DATE_ACTUAL:r[1]||'',DEPARTURE_TIME:r[2]||'',ARRIVAL_MONTH_DAY:formatMonthDay(r[10]||r[1]||''),DEPARTURE_MONTH_DAY:formatMonthDay(r[1]||''),LEG_NUMBER:r[12]||'',AVCARD:tailAircraft?.avcard?formatCardForEmail(tailAircraft.avcard):'',AVCARD_EXPIRATION:tailAircraft?.expiration||''}
-    const locationAirport=airportByIcao(code); const airportLabel=locationAirport ? `${locationAirport.city||locationAirport.name||code}${locationAirport.countryCode==='US'&&locationAirport.state?`, ${locationAirport.state}`:''} (${locationAirport.iata||code})` : code;
+    const locationAirport=airportByIcao(code); const airportLabel=locationAirport ? String(locationAirport.city||locationAirport.name||code) + (locationAirport.countryCode==='US' && locationAirport.state ? ', ' + locationAirport.state : '') + ' (' + code + ')' : code;
     emails.push({id:id++,type:'FBO',icao:code,iata:airportValues(code).IATA,airportLabel,fbo:scheduledFbo,tail,customer:customer?.name||'',subject:replaceTemplatePlaceholders(template.subject,values),body:replaceTemplatePlaceholders(template.body,values,'',tailAircraft),status:'Ready'})
   }
   return {emails,errors:Array.from(new Set(errors))}
