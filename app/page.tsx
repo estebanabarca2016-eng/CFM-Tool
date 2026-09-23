@@ -310,14 +310,39 @@ function Dashboard({ emails, emailType, setEmailType, selectedEmail, setSelected
   const visibleEmails = emails.filter(e => e.type === emailType)
   const currentSelected = selectedEmail && visibleEmails.some(e => e.id === selectedEmail.id) ? selectedEmail : (visibleEmails[0] || null)
   const [selectedFboByEmail, setSelectedFboByEmail] = useState<Record<number, number | null>>({})
-  const selectedFbo = currentSelected?.type === 'FBO' ? fbos.find(f => f.id === (selectedFboByEmail[currentSelected.id] || null)) || null : null
+  const [airnavFbos, setAirnavFbos] = useState<FBO[]>([])
+  const [airnavLoading, setAirnavLoading] = useState(false)
+  const [airnavError, setAirnavError] = useState('')
+  const selectedFboId = currentSelected?.type === 'FBO' ? (selectedFboByEmail[currentSelected.id] || null) : null
+  const isUsAirnav = !!currentSelected?.icao && /^K[A-Z0-9]{3}$/.test(String(currentSelected.icao).trim().toUpperCase())
+
+  useEffect(() => {
+    if (!currentSelected || currentSelected.type !== 'FBO' || !isUsAirnav) {
+      setAirnavFbos([])
+      setAirnavLoading(false)
+      setAirnavError('')
+      return
+    }
+    const controller = new AbortController()
+    setAirnavLoading(true)
+    setAirnavError('')
+    fetch('/api/airports?airnav=' + encodeURIComponent(String(currentSelected.icao).trim().toUpperCase()), { signal: controller.signal })
+      .then(r => r.ok ? r.json() : Promise.reject(new Error('AirNav lookup failed')))
+      .then(data => setAirnavFbos((data.rows || []) as FBO[]))
+      .catch(error => { if (error?.name !== 'AbortError') { setAirnavFbos([]); setAirnavError('AirNav FBO lookup unavailable') } })
+      .finally(() => setAirnavLoading(false))
+    return () => controller.abort()
+  }, [currentSelected?.id, currentSelected?.icao, isUsAirnav])
 
   const matchingFbos = useMemo(() => {
     if (!currentSelected || currentSelected.type !== 'FBO') return []
     const iata = String(currentSelected.iata || '').trim().toUpperCase()
     const icao = String(currentSelected.icao || '').trim().toUpperCase()
+    if (isUsAirnav) return airnavFbos
     return fbos.filter(f => (iata && f.iata.toUpperCase() === iata) || (icao && f.icao.toUpperCase() === icao))
-  }, [currentSelected, fbos])
+  }, [currentSelected, fbos, airnavFbos, isUsAirnav])
+
+  const selectedFbo = matchingFbos.find(f => f.id === selectedFboId) || null
 
   useEffect(() => {
     if (!currentSelected || currentSelected.type !== 'FBO') return
@@ -330,6 +355,7 @@ function Dashboard({ emails, emailType, setEmailType, selectedEmail, setSelected
   async function openInFront(subjectText: string, bodyText: string) {
     if (!currentSelected || currentSelected.type !== 'FBO') return notify('Select an FBO email first')
     if (!selectedFbo) return notify('Select an FBO from the location dropdown first')
+    if (!selectedFbo.email) return notify('The selected FBO has no email listed by AirNav')
     const subject = subjectText.trim()
     const body = bodyText.trim()
     const mailto = 'mailto:' + encodeURIComponent(selectedFbo.email) + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body)
@@ -345,7 +371,7 @@ function Dashboard({ emails, emailType, setEmailType, selectedEmail, setSelected
   return <>
     <div className="hero"><div><small className="heroBrand">CORPORATE FUEL MANAGEMENT</small><small>WELCOME TO</small><h2>Turn schedules<br />into action.</h2><p>Faster. Smarter. Together.</p></div><div className="planeGraphic">✈</div><div className="heroTag">AVIATION<br />FUELS<br />PEOPLE<br />POSSIBILITIES™</div></div>
     <div className="stats"><Stat icon={Users} value={customer} label="Customer" detail={hasSchedule ? 'Current Schedule' : ''} /><Stat icon={Plane} value={tail} label="Tail" detail={hasSchedule ? '1 aircraft' : ''} /><Stat icon={Activity} value={route} label="Route" detail={hasSchedule ? (Math.max(0, route.split(' → ').length - 1) + ' legs') : ''} /><Stat icon={Zap} value={fbo} label="FBO" detail={hasSchedule ? 'Primary FBO' : ''} /><Stat icon={CalendarDays} value={active[2] || ''} label="ETD" detail={hasSchedule ? (active[1] || '') : ''} /><Stat icon={CalendarDays} value={active[11] || ''} label="ETA" detail={hasSchedule ? (active[10] || '') : ''} /><Stat icon={Users} value={active[14] || ''} label="Agent" detail={hasSchedule ? customer : ''} /></div>
-    {emails.length > 0 && currentSelected && <div className="emailLayout"><div className="panel emailPanel"><div className="tabs"><button className={emailType === 'FBO' ? 'tab active' : 'tab'} onClick={() => { setEmailType('FBO'); setSelectedEmail(emails.find(e => e.type === 'FBO') || null) }}>FBO Emails ({emails.filter(e => e.type === 'FBO').length})</button><button className={emailType === 'Customer' ? 'tab active' : 'tab'} onClick={() => { setEmailType('Customer'); setSelectedEmail(emails.find(e => e.type === 'Customer') || null) }}>Customer Emails ({emails.filter(e => e.type === 'Customer').length})</button></div><div className="panelHead"><div><h3><Mail size={19} /> {emailType} Emails</h3><p>Click an email to preview the generated template.</p></div><div className="filters"><span><Search size={13} /> Search by ICAO, FBO, subject...</span><span>All Statuses⌄</span></div></div><div className="tableWrap"><table><thead><tr><th>ICAO</th><th>FBO</th><th>Subject</th><th>Aircraft</th><th>Date/Time</th><th>Status</th><th></th></tr></thead><tbody>{visibleEmails.map(e => <tr key={e.id} className={currentSelected.id === e.id ? 'selectedRow' : ''} onClick={() => setSelectedEmail(e)}><td><b>{e.icao}</b></td><td>{e.fbo}</td><td>{stripHtml(e.subject)}</td><td>{e.tail}</td><td>{active[1] || ''} {active[2] || ''}</td><td><span className="status ready"><i />{e.status}</span></td><td><button className="tiny" onClick={ev => { ev.stopPropagation(); setSelectedEmail(e) }}><Mail size={13} /></button></td></tr>)}</tbody></table></div></div><EmailPreview email={currentSelected} notify={notify} selectedFbo={selectedFbo} matchingFbos={matchingFbos} setSelectedFbo={id => currentSelected?.type === 'FBO' && setSelectedFboByEmail(prev => ({ ...prev, [currentSelected.id]: id }))} openInFront={openInFront} /></div>}
+    {emails.length > 0 && currentSelected && <div className="emailLayout"><div className="panel emailPanel"><div className="tabs"><button className={emailType === 'FBO' ? 'tab active' : 'tab'} onClick={() => { setEmailType('FBO'); setSelectedEmail(emails.find(e => e.type === 'FBO') || null) }}>FBO Emails ({emails.filter(e => e.type === 'FBO').length})</button><button className={emailType === 'Customer' ? 'tab active' : 'tab'} onClick={() => { setEmailType('Customer'); setSelectedEmail(emails.find(e => e.type === 'Customer') || null) }}>Customer Emails ({emails.filter(e => e.type === 'Customer').length})</button></div><div className="panelHead"><div><h3><Mail size={19} /> {emailType} Emails</h3><p>Click an email to preview the generated template.</p></div><div className="filters"><span><Search size={13} /> Search by ICAO, FBO, subject...</span><span>All Statuses⌄</span></div></div><div className="tableWrap"><table><thead><tr><th>ICAO</th><th>FBO</th><th>Subject</th><th>Aircraft</th><th>Date/Time</th><th>Status</th><th></th></tr></thead><tbody>{visibleEmails.map(e => <tr key={e.id} className={currentSelected.id === e.id ? 'selectedRow' : ''} onClick={() => setSelectedEmail(e)}><td><b>{e.icao}</b></td><td>{e.fbo}</td><td>{stripHtml(e.subject)}</td><td>{e.tail}</td><td>{active[1] || ''} {active[2] || ''}</td><td><span className="status ready"><i />{e.status}</span></td><td><button className="tiny" onClick={ev => { ev.stopPropagation(); setSelectedEmail(e) }}><Mail size={13} /></button></td></tr>)}</tbody></table></div></div><EmailPreview email={currentSelected} notify={notify} selectedFbo={selectedFbo} matchingFbos={matchingFbos} setSelectedFbo={id => currentSelected?.type === 'FBO' && setSelectedFboByEmail(prev => ({ ...prev, [currentSelected.id]: id }))} openInFront={openInFront} airnavLoading={airnavLoading} airnavError={airnavError} isUsAirnav={isUsAirnav} /></div>}
     <div className="panel recent"><div className="panelHead"><div><h3><FileText size={18} /> Recently Processed Schedules</h3><p>Schedules currently in your workspace</p></div></div><FlightTable rows={routeInfo.rows.length ? routeInfo.rows.map(r => [r[0], r[1], r[3], r[13], `${r[4] || ''} → ${r[6] || ''}`, r[2], r[11], cleanFboName(r[15] || '') , 'Ready']) : flights} /></div>
 
   </>
@@ -364,7 +390,7 @@ function copyRichText(html: string, notify: (s: string) => void, label: string) 
     navigator.clipboard.write([new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }), 'text/plain': new Blob([plain], { type: 'text/plain' }) })]).then(() => notify(label)).catch(() => navigator.clipboard?.writeText(plain).then(() => notify(label)))
   } else navigator.clipboard?.writeText(plain).then(() => notify(label))
 }
-function EmailPreview({ email, notify, selectedFbo, matchingFbos, setSelectedFbo, openInFront }: { email: Email; notify: (s: string) => void; selectedFbo: FBO | null; matchingFbos: FBO[]; setSelectedFbo: (id: number | null) => void; openInFront: (subject: string, body: string) => void }) {
+function EmailPreview({ email, notify, selectedFbo, matchingFbos, setSelectedFbo, openInFront, airnavLoading, airnavError, isUsAirnav }: { email: Email; notify: (s: string) => void; selectedFbo: FBO | null; matchingFbos: FBO[]; setSelectedFbo: (id: number | null) => void; openInFront: (subject: string, body: string) => void; airnavLoading: boolean; airnavError: string; isUsAirnav: boolean }) {
   const [draftSubject, setDraftSubject] = useState(email.subject)
   const [draftBody, setDraftBody] = useState(email.body)
   const bodyRef = React.useRef<HTMLDivElement>(null)
@@ -384,10 +410,12 @@ function EmailPreview({ email, notify, selectedFbo, matchingFbos, setSelectedFbo
       {email.type === 'FBO' && <div className="fboComposeBox">
         <div className="fboComposeTitle"><b>FBO Email</b><span>{email.iata ? email.iata + ' / ' + email.icao : email.icao}</span></div>
         <div className="fboComposeGrid">
-          <label>Location<select value={selectedFbo?.id || ''} onChange={e => setSelectedFbo(e.target.value ? Number(e.target.value) : null)}><option value="">Select FBO for this location...</option>{matchingFbos.map(f => <option key={f.id} value={f.id}>{f.name} — {f.email}</option>)}</select></label>
-          <div className="fboSelectedDetails"><span><b>To:</b> {selectedFbo?.email || '—'}</span><span><b>Phone:</b> {selectedFbo?.phone || '—'}</span></div>
+          <label>FBO at this location<select value={selectedFbo?.id || ''} onChange={e => setSelectedFbo(e.target.value ? Number(e.target.value) : null)}><option value="">Select FBO...</option>{matchingFbos.map(f => <option key={f.id} value={f.id}>{f.name}{f.email ? ' — ' + f.email : ' — Email not listed'}</option>)}</select></label>
+          <div className="fboSelectedDetails"><span><b>Source:</b> {isUsAirnav ? 'AirNav' : 'FBO Directory'}</span><span><b>Phone:</b> {selectedFbo?.phone || '—'}</span></div>
         </div>
-        {!matchingFbos.length && <small className="fieldHint">No FBOs are registered for this IATA/ICAO yet. Add one in FBOs.</small>}
+        {airnavLoading && <small className="fieldHint">Looking up available FBOs on AirNav…</small>}
+        {airnavError && <small className="fieldHint">{airnavError}. You can use the FBO Directory fallback.</small>}
+        {!airnavLoading && !airnavError && !matchingFbos.length && <small className="fieldHint">{isUsAirnav ? 'AirNav did not return any FBO records for this airport.' : 'No FBOs are registered for this location.'}</small>}
       </div>}
       <div className="previewField">
         <div className="previewLabel"><b>To</b></div>
@@ -410,7 +438,6 @@ function EmailPreview({ email, notify, selectedFbo, matchingFbos, setSelectedFbo
     </div>
   </div>
 }
-
 function FlightTable({ rows }: { rows: string[][] }) { return <div className="tableWrap"><table><thead><tr>{['Trip #', 'Date', 'Aircraft', 'Client', 'Route', 'ETD', 'ETA', 'FBO', 'Status', 'Actions'].map(h => <th key={h}>{h}</th>)}</tr></thead><tbody>{rows.map((r, i) => <tr key={i}>{r.map((c, j) => <td key={j}>{j === 8 ? <span className={'status ' + String(c).toLowerCase()}><i />{c}</span> : c}</td>)}<td><button className="tiny"><Mail size={13} /></button><button className="tiny"><FileText size={13} /></button></td></tr>)}</tbody></table></div> }
 
 

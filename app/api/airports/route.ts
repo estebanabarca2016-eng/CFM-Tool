@@ -52,8 +52,80 @@ async function getDatabase() {
   return databasePromise
 }
 
+
+type AirNavFbo = { id: number; iata: string; icao: string; name: string; email: string; phone: string }
+
+function decodeHtml(value: string) {
+  return value
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&#x27;/gi, "'")
+    .replace(/&ndash;/gi, '–')
+    .replace(/&mdash;/gi, '—')
+}
+
+function stripAirNavHtml(value: string) {
+  return decodeHtml(value.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim()
+}
+
+function parseAirNavFbos(html: string, icao: string): AirNavFbo[] {
+  const heading = /FBO,\s*Fuel Providers,\s*and Aircraft Ground Support/i.exec(html)
+  if (!heading || heading.index === undefined) return []
+  const afterHeading = html.slice(heading.index)
+  const nextHeading = /<h[1-6]\b/i.exec(afterHeading.slice(80))
+  const section = nextHeading && nextHeading.index !== undefined ? afterHeading.slice(0, nextHeading.index + 80) : afterHeading
+  const rows = Array.from(section.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi))
+  const found: AirNavFbo[] = []
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i][1]
+    const emailMatch = /mailto:([^"'?&\s<>]+)/i.exec(row)
+    const email = emailMatch ? decodeURIComponent(emailMatch[1]).trim() : ''
+    const rowText = stripAirNavHtml(row)
+    const phoneMatch = rowText.match(/(?:\+?1[\s.-]?)?(?:\(\d{3}\)|\d{3})[\s.-]\d{3}[\s.-]\d{4}/)
+    const phone = phoneMatch ? phoneMatch[0] : ''
+    const anchors = Array.from(row.matchAll(/<a\b[^>]*>([\s\S]*?)<\/a>/gi)).map(m => stripAirNavHtml(m[1])).filter(Boolean)
+    const cells = Array.from(row.matchAll(/<t[dh]\b[^>]*>([\s\S]*?)<\/t[dh]>/gi)).map(m => stripAirNavHtml(m[1])).filter(Boolean)
+    const excluded = /^(business name|contact|services \/ description|fuel prices|comments|web site|email|write|more info(?: and photos)?|more info about)/i
+    const name = anchors.find(v => !excluded.test(v) && !/@/.test(v) && v.length <= 120)
+      || cells.find(v => !excluded.test(v) && !/@/.test(v) && v.length <= 120 && !/^ASRI\b/i.test(v))
+    if (!name || (!email && !phone)) continue
+    found.push({ id: found.length + 1, iata: '', icao, name, email, phone })
+  }
+
+  const dedup = new Map<string, AirNavFbo>()
+  for (const fbo of found) {
+    const key = [fbo.name.toLowerCase(), fbo.email.toLowerCase(), fbo.phone].join('|')
+    if (!dedup.has(key)) dedup.set(key, { ...fbo, id: dedup.size + 1 })
+  }
+  return Array.from(dedup.values())
+}
+
+async function fetchAirNavFbos(icao: string) {
+  const code = icao.trim().toUpperCase()
+  if (!/^K[A-Z0-9]{3}$/.test(code)) throw new Error('AirNav lookup is available only for Kxxx U.S. ICAO codes')
+  const response = await fetch('https://www.airnav.com/airport/' + encodeURIComponent(code), {
+    headers: {
+      'User-Agent': 'Corporate Fuel Management Tool FBO lookup',
+      'Accept': 'text/html,application/xhtml+xml'
+    },
+    next: { revalidate: 900 }
+  })
+  if (!response.ok) throw new Error('AirNav returned ' + response.status)
+  return parseAirNavFbos(await response.text(), code)
+}
+
 export async function GET(req: NextRequest) {
   try {
+    const searchParams = new URL(req.url).searchParams
+    const airnav = (searchParams.get('airnav') || '').trim().toUpperCase()
+    if (airnav) {
+      if (!/^K[A-Z0-9]{3}$/.test(airnav)) return NextResponse.json({ error: 'AirNav FBO lookup is limited to Kxxx U.S. ICAO codes' }, { status: 400 })
+      const rows = await fetchAirNavFbos(airnav)
+      return NextResponse.json({ rows, total: rows.length, source: 'AirNav', icao: airnav })
+    }
     const db = [...await getDatabase(), ...customRows]
     const { searchParams } = new URL(req.url); const q = (searchParams.get('q') || '').trim().toLowerCase(); const icao = (searchParams.get('icao') || '').trim().toUpperCase(); const iata = (searchParams.get('iata') || '').trim().toUpperCase()
     const icaos = Array.from(new Set((searchParams.get('icaos') || '').split(',').map(v => v.trim().toUpperCase()).filter(Boolean)))
