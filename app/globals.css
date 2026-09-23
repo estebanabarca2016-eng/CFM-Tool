@@ -116,3 +116,6 @@
 .fboSelectedDetails b{color:#314d6b}
 .openFrontButton{width:100%;margin-top:12px}
 @media(max-width:850px){.fboSelectedDetails{display:grid;grid-template-columns:1fr}.fboComposeTitle{align-items:flex-start;flex-direction:column}}
+
+.customerSelectionTools{display:flex;align-items:stretch;gap:8px;margin-top:7px;margin-bottom:8px}.selectAllCustomers{flex:1;display:grid!important;grid-template-columns:18px 1fr!important;align-items:center;border:1px solid #bcd6ec!important;background:#f5faff!important;border-radius:7px!important;padding:9px 10px!important;cursor:pointer}.selectAllCustomers input{width:auto!important;margin:0!important;grid-row:1/3}.selectAllCustomers span{font-size:9px!important;color:#234e73!important;font-weight:800}.selectAllCustomers small{grid-column:2;font-size:7.5px;color:#6f8194;margin-top:2px}.unselectAllButton{white-space:nowrap;min-width:108px}
+@media(max-width:700px){.customerSelectionTools{flex-direction:column}.unselectAllButton{width:100%}}
