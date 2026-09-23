@@ -232,10 +232,10 @@ export default function App() {
   useEffect(() => { window.localStorage.setItem('cfm-profile', profile) }, [profile])
   function changeProfile(next: Profile) {
     setProfile(next)
-    if (next === 'Dispatcher' && !['Dashboard', 'Schedule Processor', 'Settings'].includes(page)) setPage('Dashboard')
+    if (next === 'Dispatcher' && !['Dashboard', 'Settings'].includes(page)) setPage('Dashboard')
     setMobile(false)
   }
-  const visibleNav = profile === 'Dispatcher' ? nav.filter(([p]) => p === 'Dashboard' || p === 'Schedule Processor' || p === 'Settings') : nav
+  const visibleNav = profile === 'Dispatcher' ? nav.filter(([p]) => p === 'Dashboard' || p === 'Settings') : nav
   const [query, setQuery] = useState('')
   const [schedule, setSchedule] = useState('')
   const [generatedEmails, setGeneratedEmails] = useState<Email[]>([])
@@ -841,6 +841,6 @@ function SettingsPage({ profile, setProfile, notify, customers, setCustomers, co
   }
   return <div className="settingsGrid">
     <div className="panel settingSection"><h3>Excel Data Backup</h3><p className="fieldHint">Download your current CFM data as a multi-sheet Excel workbook, or import it later to restore the data.</p><div className="excelActions"><button className="primary" onClick={()=>downloadWorkbook(false)}><DownloadIcon size={15}/>Download Current Data</button><button className="secondary" onClick={()=>downloadWorkbook(true)}><FileText size={15}/>Download Excel Template</button><label className="secondary fileImportButton"><Upload size={15}/>Import Excel Backup<input type="file" accept=".xlsx,.xls" onChange={e=>{const file=e.target.files?.[0];if(file)void importWorkbook(file);e.currentTarget.value='' }}/></label></div><div className="backupSheets"><b>Worksheets</b><span>Customers</span><span>Customer Contacts</span><span>Aircraft</span><span>Customer Deals</span><span>Templates</span><span>Schedule</span><span>Generated Emails</span></div></div>
-    <div className="panel settingSection"><h3>Profile Access</h3><p className="fieldHint">Choose the operating profile for this workstation. Both profiles use the same customers, aircraft, templates, airports and other CFM data.</p><div className="profileCards"><button type="button" className={profile==='Supervisor'?'profileCard active':'profileCard'} onClick={()=>setProfile('Supervisor')}><div><b>Supervisor</b><small>Full access to Dashboard, Schedule Processor, Customers, Aircraft, Templates, Airports, Alerts and Settings.</small></div><Check size={16}/></button><button type="button" className={profile==='Dispatcher'?'profileCard active':'profileCard'} onClick={()=>setProfile('Dispatcher')}><div><b>Dispatcher</b><small>Access limited to Dashboard and Schedule Processor. Schedule processing still uses the supervisor's shared data.</small></div><Check size={16}/></button></div></div>
+    <div className="panel settingSection"><h3>Profile Access</h3><p className="fieldHint">Choose the operating profile for this workstation. Both profiles use the same customers, aircraft, templates, airports and other CFM data.</p><div className="profileCards"><button type="button" className={profile==='Supervisor'?'profileCard active':'profileCard'} onClick={()=>setProfile('Supervisor')}><div><b>Supervisor</b><small>Full access to Dashboard, Schedule Processor, Customers, Aircraft, Templates, Airports, Alerts and Settings.</small></div><Check size={16}/></button><button type="button" className={profile==='Dispatcher'?'profileCard active':'profileCard'} onClick={()=>setProfile('Dispatcher')}><div><b>Dispatcher</b><small>Access limited to Dashboard and Settings. Schedule Processor is available only to the Supervisor profile.</small></div><Check size={16}/></button></div></div>
   </div>
 }
