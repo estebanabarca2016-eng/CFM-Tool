@@ -130,3 +130,4 @@
 .addEmailButton,.removeEmailButton{width:32px;height:32px;border:0;border-radius:6px;display:grid;place-items:center;cursor:pointer}
 .addEmailButton{background:#0b75e5;color:#fff;box-shadow:0 3px 8px rgba(9,104,219,.16)}
 .removeEmailButton{background:#fff0f0;color:#c53b3b;border:1px solid #efc7c7}
+.excelActions{display:grid;gap:8px;margin-top:12px}.excelActions .primary,.excelActions .secondary{width:100%}.fileImportButton{position:relative;overflow:hidden;cursor:pointer}.fileImportButton input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}.backupSheets{display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin-top:12px}.backupSheets b{width:100%;font-size:8px;color:#64758a;margin-bottom:2px}.backupSheets span{font-size:7.5px;font-weight:700;color:#1767c5;background:#eaf4ff;border:1px solid #cfe3f7;border-radius:5px;padding:4px 6px}
