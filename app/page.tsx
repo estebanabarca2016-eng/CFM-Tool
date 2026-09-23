@@ -232,10 +232,10 @@ export default function App() {
   useEffect(() => { window.localStorage.setItem('cfm-profile', profile) }, [profile])
   function changeProfile(next: Profile) {
     setProfile(next)
-    if (next === 'Dispatcher' && !['Dashboard', 'Settings'].includes(page)) setPage('Dashboard')
+    if (next === 'Dispatcher' && !['Dashboard', 'Schedule Processor', 'Settings'].includes(page)) setPage('Dashboard')
     setMobile(false)
   }
-  const visibleNav = profile === 'Dispatcher' ? nav.filter(([p]) => p === 'Dashboard' || p === 'Settings') : nav
+  const visibleNav = profile === 'Dispatcher' ? nav.filter(([p]) => p === 'Dashboard' || p === 'Schedule Processor' || p === 'Settings') : nav
   const [query, setQuery] = useState('')
   const [schedule, setSchedule] = useState('')
   const [generatedEmails, setGeneratedEmails] = useState<Email[]>([])
@@ -258,7 +258,7 @@ export default function App() {
 
   return <div className="shell">
     <aside className={mobile ? 'sidebar open' : 'sidebar'}><Logo /><div className="sideNav">{visibleNav.map(([p, sub, Icon]) => <button key={p} className={page === p ? 'navItem active' : 'navItem'} onClick={() => { setPage(p); setMobile(false) }}><Icon size={18} /><span>{p}</span><small>{sub}</small>{p === 'Alerts' && avcardAlerts.length > 0 && <em className="navAlertBadge">{avcardAlerts.length}</em>}</button>)}</div><div className="sideFoot"><div className="connected"><span></span><div><b>Operations</b><small>System connected</small></div></div><div className="tagline">AVIATION<br />FUELS<br />PEOPLE<br />POSSIBILITIES™</div></div></aside>
-    <main className="main"><header><button className="hamb" onClick={() => setMobile(!mobile)}><Menu /></button><button className="iconBtn topAlertBtn" onClick={() => { setPage('Alerts'); notify('Opening alerts') }} aria-label="Alerts"><Bell size={19} /><em>{avcardAlerts.length}</em></button></header>
+    <main className="main"><header><button className="hamb" onClick={() => setMobile(!mobile)}><Menu /></button>{profile === 'Supervisor' && <button className="iconBtn topAlertBtn" onClick={() => { setPage('Alerts'); notify('Opening alerts') }} aria-label="Alerts"><Bell size={19} /><em>{avcardAlerts.length}</em></button>}</header>
       <div className="content">{page !== 'Dashboard' && <div className="pageTitle"><div><h1>{title}</h1><p>{page === 'Schedule Processor' ? 'Paste your Excel schedule, review the communications that will be generated, and confirm.' : 'Manage aviation fuel operations, schedules and communications.'}</p></div></div>}
         {page === 'Dashboard' && <Dashboard emails={emails} emailType={emailType} setEmailType={setEmailType} selectedEmail={selectedEmail} setSelectedEmail={setSelectedEmail} notify={notify} routeInfo={routeInfo} />}
         {page === 'Schedule Processor' && <ScheduleProcessor schedule={schedule} setSchedule={setSchedule} notify={notify} deals={deals} customers={customers} aircraft={aircraft} templates={templates} contacts={contacts} setGeneratedEmails={setGeneratedEmails} setPage={setPage} />}
@@ -841,6 +841,6 @@ function SettingsPage({ profile, setProfile, notify, customers, setCustomers, co
   }
   return <div className="settingsGrid">
     <div className="panel settingSection"><h3>Excel Data Backup</h3><p className="fieldHint">Download your current CFM data as a multi-sheet Excel workbook, or import it later to restore the data.</p><div className="excelActions"><button className="primary" onClick={()=>downloadWorkbook(false)}><DownloadIcon size={15}/>Download Current Data</button><button className="secondary" onClick={()=>downloadWorkbook(true)}><FileText size={15}/>Download Excel Template</button><label className="secondary fileImportButton"><Upload size={15}/>Import Excel Backup<input type="file" accept=".xlsx,.xls" onChange={e=>{const file=e.target.files?.[0];if(file)void importWorkbook(file);e.currentTarget.value='' }}/></label></div><div className="backupSheets"><b>Worksheets</b><span>Customers</span><span>Customer Contacts</span><span>Aircraft</span><span>Customer Deals</span><span>Templates</span><span>Schedule</span><span>Generated Emails</span></div></div>
-    <div className="panel settingSection"><h3>Profile Access</h3><p className="fieldHint">Choose the operating profile for this workstation. Both profiles use the same customers, aircraft, templates, airports and other CFM data.</p><div className="profileCards"><button type="button" className={profile==='Supervisor'?'profileCard active':'profileCard'} onClick={()=>setProfile('Supervisor')}><div><b>Supervisor</b><small>Full access to Dashboard, Schedule Processor, Customers, Aircraft, Templates, Airports, Alerts and Settings.</small></div><Check size={16}/></button><button type="button" className={profile==='Dispatcher'?'profileCard active':'profileCard'} onClick={()=>setProfile('Dispatcher')}><div><b>Dispatcher</b><small>Access limited to Dashboard and Settings. Schedule Processor is available only to the Supervisor profile.</small></div><Check size={16}/></button></div></div>
+    <div className="panel settingSection"><h3>Profile Access</h3><p className="fieldHint">Choose the operating profile for this workstation. Both profiles use the same customers, aircraft, templates, airports and other CFM data.</p><div className="profileCards"><button type="button" className={profile==='Supervisor'?'profileCard active':'profileCard'} onClick={()=>setProfile('Supervisor')}><div><b>Supervisor</b><small>Full access to Dashboard, Schedule Processor, Customers, Aircraft, Templates, Airports, Alerts and Settings.</small></div><Check size={16}/></button><button type="button" className={profile==='Dispatcher'?'profileCard active':'profileCard'} onClick={()=>setProfile('Dispatcher')}><div><b>Dispatcher</b><small>Access limited to Dashboard and Schedule Processor. Schedule processing still uses the supervisor's shared data.</small></div><Check size={16}/></button></div></div>
   </div>
 }
