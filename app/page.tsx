@@ -372,7 +372,21 @@ function Dashboard({ emails, emailType, setEmailType, selectedEmail, setSelected
         : { to: [], cc: currentSelected.ccEmails || currentSelected.toEmails || [] }
       return { ...prev, [recipientKey]: initial }
     })
-  }, [recipientKey, currentSelected?.id, selectedFbo?.email])
+  }, [recipientKey, currentSelected?.id])
+
+  // AirNav results load asynchronously. Keep the selected FBO's email synced into
+  // this draft's To field after the AirNav selection becomes available, even when
+  // the draft was initialized before the lookup finished.
+  useEffect(() => {
+    if (!currentSelected || currentSelected.type !== 'FBO' || !selectedFbo?.email) return
+    setRecipientLists(prev => {
+      const current = prev[recipientKey] || { to: [], cc: currentSelected.ccEmails || [] }
+      const airnavEmails = matchingFbos.map(item => item.email).filter(Boolean)
+      const shouldSync = current.to.length === 0 || current.to.some(email => airnavEmails.includes(email))
+      if (!shouldSync || current.to.length === 1 && current.to[0] === selectedFbo.email) return prev
+      return { ...prev, [recipientKey]: { ...current, to: [selectedFbo.email] } }
+    })
+  }, [recipientKey, currentSelected?.id, selectedFbo?.id, selectedFbo?.email, matchingFbos])
 
   function selectFboForCurrentEmail(id: number | null) {
     if (!currentSelected || currentSelected.type !== 'FBO') return
