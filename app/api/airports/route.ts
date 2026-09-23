@@ -73,26 +73,69 @@ function stripAirNavHtml(value: string) {
 function parseAirNavFbos(html: string, icao: string): AirNavFbo[] {
   const heading = /FBO,\s*Fuel Providers,\s*and Aircraft Ground Support/i.exec(html)
   if (!heading || heading.index === undefined) return []
-  const afterHeading = html.slice(heading.index)
-  const nextHeading = /<h[1-6]\b/i.exec(afterHeading.slice(80))
-  const section = nextHeading && nextHeading.index !== undefined ? afterHeading.slice(0, nextHeading.index + 80) : afterHeading
-  const rows = Array.from(section.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi))
-  const found: AirNavFbo[] = []
 
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i][1]
+  // Keep only the actual FBO table. AirNav places "nearby airport" alternatives
+  // after the on-airport FBO records, so do not let those leak into the result.
+  let section = html.slice(heading.index)
+  const cutPoints = [
+    /Alternatives at nearby airports/i,
+    /Aviation Businesses, Services, and Facilities/i
+  ]
+  for (const pattern of cutPoints) {
+    const match = pattern.exec(section.slice(100))
+    if (match && match.index !== undefined) {
+      section = section.slice(0, match.index + 100)
+    }
+  }
+
+  const found: AirNavFbo[] = []
+  const excluded = /^(business name|contact|services \/ description|fuel prices|comments|web site|email|write|more info(?: and photos)?|more info about|independent|full service)$/i
+
+  const addFbo = (name: string, email: string, phone: string) => {
+    const cleanName = stripAirNavHtml(name)
+    const cleanEmail = decodeHtml(email).trim()
+    const cleanPhone = phone.trim()
+    if (!cleanName || excluded.test(cleanName) || /@/.test(cleanName) || cleanName.length > 120) return
+    if (!cleanEmail && !cleanPhone) return
+    found.push({ id: found.length + 1, iata: '', icao, name: cleanName, email: cleanEmail, phone: cleanPhone })
+  }
+
+  const rows = Array.from(section.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi))
+  for (const match of rows) {
+    const row = match[1]
     const emailMatch = /mailto:([^"'?&\s<>]+)/i.exec(row)
     const email = emailMatch ? decodeURIComponent(emailMatch[1]).trim() : ''
     const rowText = stripAirNavHtml(row)
     const phoneMatch = rowText.match(/(?:\+?1[\s.-]?)?(?:\(\d{3}\)|\d{3})[\s.-]\d{3}[\s.-]\d{4}/)
     const phone = phoneMatch ? phoneMatch[0] : ''
-    const anchors = Array.from(row.matchAll(/<a\b[^>]*>([\s\S]*?)<\/a>/gi)).map(m => stripAirNavHtml(m[1])).filter(Boolean)
-    const cells = Array.from(row.matchAll(/<t[dh]\b[^>]*>([\s\S]*?)<\/t[dh]>/gi)).map(m => stripAirNavHtml(m[1])).filter(Boolean)
-    const excluded = /^(business name|contact|services \/ description|fuel prices|comments|web site|email|write|more info(?: and photos)?|more info about)/i
+    const anchors = Array.from(row.matchAll(/<a\b[^>]*>([\s\S]*?)<\/a>/gi))
+      .map(m => stripAirNavHtml(m[1]))
+      .filter(Boolean)
+    const cells = Array.from(row.matchAll(/<t[dh]\b[^>]*>([\s\S]*?)<\/t[dh]>/gi))
+      .map(m => stripAirNavHtml(m[1]))
+      .filter(Boolean)
+
     const name = anchors.find(v => !excluded.test(v) && !/@/.test(v) && v.length <= 120)
       || cells.find(v => !excluded.test(v) && !/@/.test(v) && v.length <= 120 && !/^ASRI\b/i.test(v))
-    if (!name || (!email && !phone)) continue
-    found.push({ id: found.length + 1, iata: '', icao, name, email, phone })
+    if (name) addFbo(name, email, phone)
+  }
+
+  // Fallback for AirNav markup changes where the FBO row is not wrapped in <tr>.
+  // Use the email link as the anchor point and inspect nearby anchors/phone text.
+  if (!found.length) {
+    const emailLinks = Array.from(section.matchAll(/mailto:([^"'?&\s<>]+)/gi))
+    for (const match of emailLinks) {
+      const email = decodeURIComponent(match[1]).trim()
+      const start = Math.max(0, (match.index || 0) - 2400)
+      const context = section.slice(start, Math.min(section.length, (match.index || 0) + 500))
+      const rowText = stripAirNavHtml(context)
+      const phoneMatch = rowText.match(/(?:\+?1[\s.-]?)?(?:\(\d{3}\)|\d{3})[\s.-]\d{3}[\s.-]\d{4}/)
+      const anchors = Array.from(context.matchAll(/<a\b[^>]*>([\s\S]*?)<\/a>/gi))
+        .map(m => stripAirNavHtml(m[1]))
+        .filter(Boolean)
+      const name = anchors.reverse().find(v => !excluded.test(v) && !/@/.test(v) && v.length <= 120)
+      if (name) addFbo(name, email, phoneMatch ? phoneMatch[0] : '')
+    }
   }
 
   const dedup = new Map<string, AirNavFbo>()
